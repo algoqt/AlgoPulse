@@ -1,0 +1,57 @@
+{
+  "name": "algoquant",
+  "version": "1.0.0",
+  "builtin-baseline": "cf4ebef2294e164875ce17d7937f44d3e3ea156e",
+  "dependencies": [
+    {
+      "name": "boost",
+      "default-features": true,
+      "platform": "windows",
+      "version>=": "1.84.0"
+    },
+    {
+      "name": "boost",
+      "default-features": true,
+      "platform": "!windows",
+      "version>=": "1.84.0"
+    },
+    {
+      "name": "fmt",
+      "version>=": "10.2.1#1"
+    },
+    {
+      "name": "highfive",
+      "version>=": "2.9.0"
+    },
+    {
+      "name": "hdf5",
+      "features": [
+        "szip",
+        "threadsafe",
+        "zlib"
+      ],
+      "version>=": "1.14.2",
+      "default-features": false
+    },
+    {
+      "name": "protobuf",
+      "version>=": "3.21.12#1"
+    },
+    {
+      "name": "spdlog",
+      "version>=": "1.13.0"
+    },
+    {
+      "name": "sqlite3",
+      "features": [
+        "json1"
+      ],
+      "version>=": "3.45.2"
+    },
+    {
+      "name": "jemalloc",
+      "version>=": "5.3.0#1"
+    }
+  ]
+
+}

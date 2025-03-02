@@ -1,0 +1,575 @@
+syntax = "proto3";
+
+package AlgoMsg;
+
+enum AcctType {
+
+	UnKnown  =0;
+	N_STOCK  =1;
+	N_CREDIT =2;
+
+	F_STOCK  =3;
+	F_CREDIT =4;
+
+	SIMLIVE_STOCK  = 5;
+	SIMLIVE_CREDIT = 6;
+
+	SIMCUST_STOCK  	= 7;
+
+	BT_STOCK 		= 9;
+}
+
+
+enum MsgAlgoVendorId
+{
+	VendorId_DEFAULT = 0; // 本算法
+	VendorId_OQ 	= 1;  // 安信
+	VendorId_XT 	= 2; // 迅投
+	VendorId_KF 	= 3; // 卡方
+	VendorId_HX 	= 4; // 皓兴
+
+};
+
+// 算法类型
+enum MsgAlgoCategory
+{
+	Category_ALGO 	= 0;
+	Category_SHOT 	= 1;
+	Category_SPREAD = 2;
+	Category_T0 	= 3;
+	Category_HIT 	= 4;
+
+};
+enum MsgAlgoStrategy
+{
+	NOTHING = 0;
+	TWAP 	= 1;
+	VWAP 	= 2;
+	POV  	= 3;
+	T0   	= 4;
+	SPREAD  = 5;
+
+	TWAP_AI = 10;
+	VWAP_AI = 11;
+	POV_AI 	= 12;
+
+	SHOT   	= 20;
+	HIT	   	= 21;
+};
+
+message MsgLoginRequest{
+	optional uint64		request_id 	= 1;
+	optional bytes		user_name 	= 2;
+	optional bytes		password 	= 3;
+	optional AcctType	acct_type 	= 4;
+	optional bytes		acct 		= 5;
+	optional bytes		acct_password 	= 6;
+	optional bool		reSendMessage 	= 7;
+	optional uint64 algo_msg_seq_id  = 8;  // 重传该序列号之后的算法实例信息
+	optional uint64 order_msg_seq_id = 9;  // 重传该序列号之后的柜台订单回报记录
+	optional uint64 trade_msg_seq_id = 10; // 重传该序列号之后的柜台订单成交记录
+}
+
+message MsgLoginResponse{
+	optional uint64		request_id 	= 1;
+	optional int32		error_code 	= 2;
+	optional bytes		error_msg 	= 3;
+	optional AcctType	acct_type 	= 4;
+	optional bytes		acct 		= 5;
+	optional bytes		desc 		= 6;
+}
+
+enum MsgDirection
+{
+	DEFAUT_Direction = 0;
+
+	CS_REQ = 1;
+	CS_RSP = 2;
+	CS_NTY = 3;
+
+	SS_REQ = 4;
+	SS_RSP = 5;
+	SS_NTF = 6;
+};
+
+enum MsgAlgoCMD 
+{
+	BEGIN_MSG_CMD 		= 0;
+
+	CMD_LoginRequest 	= 10;
+	CMD_LoginResponse 	= 11;
+
+	CMD_AlgoInstanceCreateRequest  = 100;
+	CMD_AlgoInstanceCreateResponse = 101;
+
+	CMD_AlgoInstanceUpdateRequest  = 102;
+	CMD_AlgoInstanceUpdateResponse = 103;
+
+	CMD_AlgoOrderQueryRequest 		= 104;
+	CMD_AlgoOrderQueryResponse 		= 105;
+
+	CMD_AlgoInstanceQueryRequest 	= 106;
+	CMD_AlgoInstanceQueryResponse 	= 107;
+
+	CMD_OrderQueryRequest  			= 108;
+	CMD_OrderQueryResponse  		= 109;
+
+	CMD_TradeQueryRequest  			= 110;
+	CMD_TradeQueryResponse  		= 111;
+
+	CMD_NOTIFY_AlgoExecutionInfo	= 201;
+	CMD_NOTIFY_Order				= 202;
+	CMD_NOTIFY_Trade				= 203;
+	CMD_NOTIFY_MarketDepth			= 204;
+
+	CMD_NOTIFY_ShotSignalInfo		= 205;
+	CMD_NOTIFY_ShotPerformance		= 206;
+
+	CMD_NOTIFY_SpreadPairInfo		= 207;
+	CMD_NOTIFY_PairPerformance		= 208;
+
+}
+enum MsgAlgoAction
+{
+	BEGIN_MSG_ACTION 	= 0;
+	ACTION_STOP 		= 1;
+	ACTION_PAUSE 		= 2;
+	ACTION_RESUME 		= 3;
+	ACTION_UPDATE 		= 4;
+}
+
+message MsgAlgoOrder
+{
+	optional bytes client_algo_order_id = 1;
+	optional bytes symbol 				= 2;
+	oneof qty_or_amount {
+		uint32  order_qty 				= 3; 
+		double  order_amount 			= 4; 
+	}
+	optional uint32 order_side 			= 5;
+	optional double order_price 		= 6;	//限价
+
+	optional uint64 start_time 			= 7;
+	optional uint64 end_time 			= 8;
+	optional double exec_duration 		= 9;
+
+	optional double max_pov 			= 10; // 最大参与率比例
+	optional double min_suborder_amount = 11; // 单笔委托最小金额
+	optional bytes  algo_params 		= 12; 
+};
+
+message MsgAlgoInstanceCreateRequest {
+	optional uint64  request_id 		= 1;
+	optional AcctType acct_type 		= 2;
+	optional bytes acct 				= 3;
+	optional MsgAlgoVendorId vendor_id 	= 4;
+	optional MsgAlgoStrategy algo_strategy 	= 5;
+	optional bytes algo_params 				= 6;
+	optional double capital 				= 7;
+	optional MsgAlgoOrder algo_order 		= 8;
+
+}
+
+message MsgAlgoInstanceCreateResponse {
+  optional uint64 request_id           = 1;
+  optional int32  error_code           = 2;
+  optional bytes  error_msg            = 3;
+  optional AcctType acct_type          = 4;
+  optional bytes  acct                 = 5;
+  repeated uint64 success_algo_order_id = 6; // 母单id
+  repeated uint64 failed_algo_order_id  = 7;
+}
+
+message MsgAlgoInstanceUpdateRequest {
+  optional uint64 request_id     = 1;
+  optional AcctType acct_type    = 2;
+  optional bytes  acct           = 3;
+  optional uint64 algo_order_id  = 4;
+  optional MsgAlgoAction action  = 5;
+  optional bytes  algo_params    = 6;
+}
+
+message MsgAlgoInstanceUpdateResponse {
+  optional uint64 request_id             = 1;
+  optional int32  error_code             = 2;
+  optional bytes  error_msg              = 3;
+  optional AcctType acct_type            = 4;
+  optional bytes  acct                   = 5;
+  optional uint64 algo_order_id          = 6;
+  optional bytes  client_algo_order_id   = 7;
+}
+
+message MsgAlgoInstanceQueryRequest {
+  optional uint64 request_id   = 1;
+  optional AcctType acct_type  = 2;
+  optional bytes  acct         = 3;
+  optional MsgAlgoVendorId vendor_id = 4;
+  optional uint64 algo_order_id = 5;
+}
+
+message MsgAlgoInstanceQueryResponse {
+  optional uint64 request_id    = 1;
+  optional int32  error_code    = 2;
+  optional bytes  error_msg     = 3;
+  optional bool   is_last       = 4;
+  repeated MsgAlgoPerformance data_array = 5;
+}
+
+message MsgAlgoOrderQueryRequest {
+  optional uint64 request_id            = 1;
+  optional AcctType acct_type           = 2;
+  optional bytes  acct                  = 3;
+  optional MsgAlgoVendorId vendor_id    = 4;
+  optional uint64 algo_order_id         = 5;
+  optional bytes  client_algo_order_id  = 6;
+}
+
+message MsgAlgoOrderQueryResponse {
+  optional uint64 request_id    = 1;
+  optional int32  error_code    = 2;
+  optional bytes  error_msg     = 3;
+  optional bool   is_last       = 4;
+  repeated MsgAlgoOrder data_array = 5;
+}
+
+message MsgOrderQueryRequest {
+  optional uint64 request_id      = 1;
+  optional AcctType acct_type     = 2;
+  optional bytes  acct            = 3;
+  optional MsgAlgoVendorId vendor_id = 4;
+  optional uint64 algo_order_id   = 5;
+  optional uint64 order_id_begin  = 6;
+  optional uint64 order_id_end    = 7;
+}
+
+message MsgOrderQueryResponse {
+  optional uint64 request_id    = 1;
+  optional int32  error_code    = 2;
+  optional bytes  error_msg     = 3;
+  optional bool   is_last       = 4;
+  repeated MsgOrderInfo data_array = 5;
+}
+
+message MsgTradeQueryRequest {
+  optional uint64 request_id      = 1;
+  optional AcctType acct_type     = 2;
+  optional bytes  acct            = 3;
+  optional MsgAlgoVendorId vendor_id = 4;
+  optional uint64 algo_order_id   = 5;
+  optional uint64 trade_id_begin  = 6;
+  optional uint64 trade_id_end    = 7;
+}
+
+message MsgTradeQueryResponse {
+  optional uint64 request_id    = 1;
+  optional int32  error_code    = 2;
+  optional bytes  error_msg     = 3;
+  optional bool   is_last       = 4;
+  repeated MsgTradeInfo data_array = 5;
+}
+
+message MsgSpreadPair {
+	optional uint64		algo_order_id 			= 1;
+	optional bytes		client_algo_order_id 	= 2;
+	optional MsgAlgoCategory algo_category 		= 3;
+	optional bytes		acct 					= 4;
+	optional AcctType   acct_type 				= 5;
+	optional uint64		pair_id 				= 6;
+
+	optional bytes		symbol 					= 7;
+	optional uint64		created_time 			= 8;
+
+	optional uint32		qty_buy   		= 9;
+	optional uint32		qty_sell		= 10;
+
+	optional uint32		qty_buy_filled 	= 11;
+	optional uint32		qty_sell_filled = 12;
+
+	optional double		amt_buy_filled 	= 13;
+	optional double		amt_sell_filled = 14;
+
+	optional double		price_buy_avg  	= 15;
+	optional double		price_sell_avg	= 16;
+
+	optional uint64		rebalance_time 	= 17;
+	optional double		pnl_realized 	= 18;
+	optional double		pnl 			= 19;
+	optional double		pnl_rate 		= 20;
+	optional uint64		closed_time 	= 21;
+	optional uint32		rebalance_times = 22;
+
+	optional bytes		description		= 29;
+	optional double		last_price		= 30;
+	optional uint32		is_buy_first 	= 31;
+	optional uint32		pair_seq_id 	= 32;
+}
+
+message MsgPairPerformance {
+  optional uint64        algo_order_id      = 1;
+  optional bytes         client_algo_order_id = 2;
+  optional MsgAlgoStrategy algo_strategy    = 3;
+  optional MsgAlgoCategory algo_category    = 4;
+  optional bytes         acct               = 5;
+  optional AcctType      acct_type          = 6;
+  optional uint32        trade_date         = 7;
+  optional uint64        start_time         = 8;
+  optional uint64        end_time           = 9;
+  optional bytes         symbol_range       = 10;
+  optional int32         symbol_count       = 11;
+  optional int32         pair_count         = 12;
+  optional double        win_rate           = 13;
+  optional double        profit2_loss_ratio = 14;
+  optional double        avg_pnl_win        = 15;
+  optional double        avg_pnl_loss       = 16;
+  optional double        amount_buy_total   = 17;
+  optional double        amount_sell_total  = 18;
+  optional double        pnl_realized       = 19;
+  optional double        pnl                = 20;
+  optional double        pnl_rate           = 21;
+  optional double        amount_unclosed    = 22;
+  optional int32         algo_status        = 23;
+  optional bytes         algo_msg           = 24;
+  optional uint64        create_time        = 25;
+}
+
+message MsgShotPerformance {
+  optional uint64        algo_order_id          = 1; // 订单 ID
+  optional bytes         client_algo_order_id   = 2; // 客户算法订单 ID
+  optional MsgAlgoStrategy algo_strategy        = 3; // 算法策略
+  optional MsgAlgoCategory algo_category        = 4; // 算法类别
+  optional bytes         acct                 = 5; // 账户
+  optional AcctType      acct_type            = 6; // 账户类型
+  optional uint32        trade_date           = 7; // 交易日期
+  optional uint64        start_time           = 8; // 开始时间
+  optional uint64        end_time             = 9; // 结束时间
+  optional bytes         symbol_range         = 10; // 标的范围
+  optional int32         symbol_count         = 11; // 标的数量
+  optional int32         signal_count         = 12; // 信号数量
+  optional double        win_rate             = 13; // 胜率
+  optional double        profit2_loss_ratio   = 14; // 盈亏比
+  optional double        avg_pnl_win          = 15; // 平均盈利
+  optional double        avg_pnl_loss         = 16; // 平均亏损
+  optional double        trade_amount         = 17; // 交易金额
+  optional double        avg_pnl              = 18; // 平均盈亏
+  optional double        avg_pnl_this_day     = 19; // 当日平均盈亏
+  optional double        avg_next_day_open_return = 20; // 次日开盘收益
+  optional int32         algo_status          = 21; // 算法状态
+  optional bytes         algo_msg             = 22; // 算法消息
+  optional uint64        create_time          = 23; // 创建时间
+}
+
+message MsgShotSignalInfo {
+  optional uint64        algo_order_id          = 1;
+  optional bytes         client_algo_order_id   = 2;
+  optional MsgAlgoCategory algo_category        = 3;
+  optional bytes         acct                 = 4;
+  optional AcctType      acct_type            = 5;
+  optional bytes         symbolRange          = 6;
+  optional double        amt_target           = 7;
+  optional uint64        signal_id            = 8;
+  optional bytes         symbol               = 9;
+  optional double        pre_close            = 10;
+  optional double        open_price           = 11;
+  optional double        open_return          = 12;
+  optional uint64        signal_time          = 13;
+  optional double        sig_shot_Amt         = 14;
+  optional double        sig_shot_change      = 15;
+  optional double        sig_shot_duration    = 16;
+  optional double        sig_shot_flow        = 17;
+  optional double        sig_shot_tr          = 18;
+  optional double        sig_arrive_price     = 19;
+  optional double        sig_arrive_change    = 20;
+  optional double        buy_price            = 21;
+  optional double        avg_buy_price        = 22;
+  optional double        sig_pnl              = 23;
+  optional double        close_price          = 24;
+  optional double        adj_factor           = 25;
+  optional double        next_day_open_price  = 26;
+  optional double        next_day_open_return = 27;
+  optional double        next_day_adj_factor  = 28;
+  optional uint32        cnt                  = 29;
+  optional bytes         description          = 30;
+  optional double        avg_sell_price       = 31;
+  optional double        total_tr             = 32;
+}
+
+message MsgAlgoPerformance {
+	// 基础订单信息
+	optional uint64 algo_order_id 		= 1;     // 算法订单 ID
+	optional bytes client_algo_order_id = 2;     // 客户算法订单 ID
+
+	// 算法相关信息
+	MsgAlgoStrategy algo_strategy 		= 3;      // 算法策略
+	MsgAlgoCategory algo_category 		= 4;      // 算法类别
+
+	// 账户信息
+	optional bytes acct 				= 5;       // 账户
+	optional AcctType acct_type 		= 6;       // 账户类型
+	optional MsgAlgoVendorId vendor_id 	= 7;       // 供应商 ID
+
+	// 交易标的相关
+	optional bytes symbol 				= 8;        // 标的
+	optional uint32 order_side 			= 9;        // 买卖方向
+	optional uint32 qty_target 			= 10;       // 目标数量
+
+	// 时间信息
+	optional uint64 start_time 			= 11;       // 开始时间
+	optional uint64 end_time  			= 12;       // 结束时间
+	optional double exec_duration 		= 13;       // 执行时长
+
+	// 数量统计
+	optional uint32 qty					= 14;       // 数量
+	optional uint32 qty_filled 			= 15;       // 已成交数量
+	optional uint32 qty_canceled 		= 16;      	// 已取消数量
+	optional uint32 qty_rejected 		= 17;       // 被拒绝数量
+
+	// 订单统计
+	optional uint32 ordercnt 			= 18;       // 总订单数
+	optional uint32 ordercnt_filled 	= 19;       // 已成交订单数
+	optional uint32 ordercnt_canceled 	= 20;       // 已取消订单数
+	optional uint32 ordercnt_rejected 	= 21;       // 被拒绝订单数
+
+	// 价格与金额
+	optional double avg_price 			= 22;      	// 平均价格
+	optional double amt 				= 23;       // 金额
+	optional double actual_pov 			= 24;       // 实际 POV
+
+	// 比率信息
+	optional double filled_rate			= 25;         // 成交比率
+	optional double maker_filled_rate 	= 26;         // maker成交比率
+	optional double maker_rate 			= 27;         // maker比率
+	optional double cancel_rate 		= 28;         // 取消比率
+
+	// 市场相关
+	optional double arrive_price 		= 29;         // 到达价格
+	optional double market_vwap 		= 30;         // 市场 VWAP
+	optional double market_twap 		= 31;         // 市场 TWAP
+
+	// 偏差统计
+	optional double slippage_arrive_price 	= 32;    // 到达价格滑点
+	optional double slippage_market_vwap 	= 33;    // 市场 VWAP 滑点
+	optional double slippage_market_twap 	= 34;    // 市场 TWAP 滑点
+
+	// 状态与信息
+	optional uint32 algo_status 			= 35;     // 算法状态
+	optional bytes  algo_msg 				= 36;     // 算法错误信息
+	optional uint64 update_time 			= 37;     // 更新时间
+}
+
+
+message MsgOrderInfo {
+
+	optional uint64 order_id 		= 1;
+	optional bytes broker 			= 2;
+	optional bytes broker_order_No 	= 3;
+	optional bytes cust_id 			= 4;
+	optional AcctType acct_type 	= 5;
+	optional bytes acct 			= 6;
+	optional uint64 order_time 		= 7;
+	optional bytes market   		= 8;
+	optional bytes symbol   		= 9;
+	optional double order_price 	= 10;
+	optional int32  order_qty 		= 11;
+	optional uint32	order_side 		= 12;
+	optional int32 qty_filled 		= 13;
+	optional double price_avg_filled	= 14;
+	optional double amount_filled 		= 15;
+	optional int32 qty_canceled 		= 16;
+
+	optional int32 order_status 		= 17;
+	optional uint64 algo_order_id 		= 18;
+	optional bytes client_algo_order_Id = 19;
+	optional uint64 pair_id 			= 20;
+	optional bytes note_text 			= 21;
+	optional uint64 update_time 		= 22;
+	
+}
+message MsgTradeInfo {
+
+	optional uint64 	trade_id 	= 1;
+	optional uint64 	trade_time 	= 2;
+
+	optional AcctType 	acct_type 	= 3;
+	optional bytes		acct		= 4;
+
+	optional uint64 	order_id 		= 5;
+	optional uint32 	broker 			= 6;
+	optional bytes  	broker_order_No = 7;
+
+	optional bytes  	market   		= 8;
+	optional bytes  	symbol   		= 9;
+	optional uint32 	order_side 		= 10;
+	optional int32  	qty_filled 		= 11;
+	optional double 	price_filled 	= 12;
+	optional double 	amount_filled 	= 13;
+	optional double 	fee 			= 14;
+	optional bytes  	note_text 		= 15;
+	
+}
+
+message MsgMarketDepth {
+
+	optional bytes symbol 		= 1;
+	optional double price 		= 2;
+	optional double pre_close 	= 3;
+	optional double open 		= 4;
+	optional double high 		= 5;
+	optional double low 		= 6;
+
+	optional int32  volume 		= 7;
+	optional double amount 		= 8;
+	optional double avg_price 	= 9;
+
+	optional double bid_price1 	= 10;
+	optional int32 bid_vol1 	= 11;
+
+	optional double bid_price2 	= 12;
+	optional int32  bid_vol2 	= 13;
+	optional double bid_price3 	= 14;
+	optional int32  bid_vol3 	= 15;
+	optional double bid_price4 	= 16;
+	optional int32  bid_vol4 	= 17;
+	optional double bid_price5 	= 18;
+	optional int32  bid_vol5 	= 19;
+
+	optional double ask_price1 	= 20;
+	optional int32  ask_vol1 	= 21;
+	optional double ask_price2 	= 22;
+	optional int32  ask_vol2 	= 23;
+	optional double ask_price3 	= 24;
+	optional int32  ask_vol3 	= 25;
+	optional double ask_price4 	= 26;
+	optional int32  ask_vol4 	= 27;
+	optional double ask_price5 	= 28;
+	optional int32  ask_vol5 	= 29;
+	optional double turn_rate 	= 30;
+	optional int32	 bs_type		= 31;
+	optional int32   delta_volume  	= 32;
+	optional double  delta_amount  	= 33;
+
+	optional uint64  quote_time 	= 34;
+	optional uint64  subscribe_key 	= 35; 
+}
+
+
+message clientKey
+{
+	optional AcctType	acct_type	= 1;
+	optional bytes		acct 		= 2;
+	optional uint32   	broker 		= 3;
+}
+
+
+message MessagHead
+{
+	optional MsgAlgoCMD   msg_cmd 		= 1;		// 消息类型分发不同业务处理 
+	optional MsgDirection msg_direction = 2; 
+	optional uint64		  msg_seq_id 	= 3;  // 唯一序号
+};
+
+message MessagePkg
+{
+	optional MessagHead head 		= 1;
+	optional clientKey  clientKey  	= 2; // 客户标识
+	optional bytes		body 		= 3;
+};
