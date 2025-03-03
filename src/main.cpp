@@ -54,9 +54,18 @@ int main() {
     spdlog::flush_every(std::chrono::seconds(3));
 
     try {
+        #if ENABLE_DELAY_STATS
+               SPDLOG_INFO("ENABLE_DELAY_STATS IS ON");
+        #else
+               SPDLOG_INFO("ENABLE_DELAY_STATS IS OFF");
+        #endif
+        #if OUTPUT_LOG_TO_STD_OUT
+               SPDLOG_INFO("OUTPUT_LOG_TO_STD_OUT IS ON");
+        #else
+               SPDLOG_INFO("OUTPUT_LOG_TO_STD_OUT IS OFF");
+        #endif
+
         SPDLOG_INFO("SPDLOG_ACTIVE_LEVEL IS {}", SPDLOG_ACTIVE_LEVEL);
-        SPDLOG_INFO("ENABLE_DELAY_STATS IS {}",  ENABLE_DELAY_STATS);
-        SPDLOG_INFO("OUTPUT_LOG_TO_STD_OUT IS {}", OUTPUT_LOG_TO_STD_OUT);
 
         AlgoService& asr = AlgoService::getInstance();
 

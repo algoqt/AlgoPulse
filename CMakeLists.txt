@@ -43,6 +43,9 @@ elseif(UNIX)
     set(LinkDirs    "${VCPKG_INSTALLED_DIR}/x64-linux/lib")
     set(IncludeDirs "${VCPKG_INSTALLED_DIR}/x64-linux/include")
 
+    set(ZLIB_INCLUDE_DIR "${VCPKG_INSTALLED_DIR}/x64-linux/include")
+    set(ZLIB_LIBRARY     "${VCPKG_INSTALLED_DIR}/x64-linux/lib")
+
     set(Boost_DIR         "${VCPKG_INSTALLED_DIR}/x64-linux/share")
     set(Boost_INCLUDE_DIR "${VCPKG_INSTALLED_DIR}/x64-linux/include")
 
@@ -60,6 +63,6 @@ function(add_subdirs_to_target_include_directories target base_dir)
     endforeach()
 endfunction()
 
-add_subdirectory(src)
-
 add_subdirectory(src/client)
+
+add_subdirectory(src)

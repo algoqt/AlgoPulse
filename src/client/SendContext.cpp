@@ -22,13 +22,13 @@ SendContext::SendContext():io_context(std::make_shared<asio::io_context>())
 
     m_threads.push_back(std::thread([this]() {
         asio::executor_work_guard<asio::io_context::executor_type> work = asio::make_work_guard(io_context->get_executor());
-        SPDLOG_INFO("SendContext::init network context");
+        SPDLOG_DEBUG("SendContext::init network context");
         io_context->run();
         }));
 
     m_threads.push_back(std::thread([this]() {
         asio::executor_work_guard<asio::io_context::executor_type> work = asio::make_work_guard(process_context->get_executor());
-        SPDLOG_INFO("SendContext::init process context");
+        SPDLOG_DEBUG("SendContext::init process context");
         process_context->run();
         }));
 
