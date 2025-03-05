@@ -50,7 +50,7 @@ void OrderBookSim::stop() {
         self->release();
      };
 
-    asio::dispatch(m_strand, task);
+    asio::dispatch(*m_request.runContextPtr, task);
 }
 
 void OrderBookSim::release() {
@@ -68,7 +68,7 @@ void OrderBookSim::release() {
 
 SubscribeOrderKey_t OrderBookSim::subscribe(std::shared_ptr<SubscribeOrder_t> subPtr) {
 
-    asio::dispatch(m_strand, [self = shared_from_this(), subPtr]() {self->_subscribe(subPtr); });
+    asio::dispatch(*m_request.runContextPtr, [self = shared_from_this(), subPtr]() {self->_subscribe(subPtr); });
 
     return subPtr->subscribeKey;
 }
@@ -104,7 +104,7 @@ SubscribeOrderKey_t OrderBookSim::_subscribe(std::shared_ptr<SubscribeOrder_t> s
 
 void OrderBookSim::unSubscribe(const SubscribeOrderKey_t& subscribeKey) {
 
-    asio::dispatch(m_strand, [self = shared_from_this(), subscribeKey]() {
+    asio::dispatch(*m_request.runContextPtr, [self = shared_from_this(), subscribeKey]() {
         self->_unSubscribe(subscribeKey);
         });
 }
@@ -142,7 +142,7 @@ std::shared_ptr<OrderBookSim> OrderBookSim::shared_from_this()
 
 void OrderBookSim::addAcctAsset(const AcctKey_t& acctKey, AssetInfo& asset) {
 
-    asio::dispatch(m_strand, [self = shared_from_this(), this, asset]() {
+    asio::dispatch(*m_request.runContextPtr, [self = shared_from_this(), this, asset]() {
 
         acctAssetInfos.try_emplace(asset.acctKey, asset);
     });
@@ -150,7 +150,7 @@ void OrderBookSim::addAcctAsset(const AcctKey_t& acctKey, AssetInfo& asset) {
 
 void OrderBookSim::addPosition(const PositionInfo& position) {
 
-    asio::dispatch(m_strand, [self = shared_from_this(), this, position]() {
+    asio::dispatch(*m_request.runContextPtr, [self = shared_from_this(), this, position]() {
 
         AcctKey_t acctKey = { position.acctType, position.acct, position.brokerId };
 
@@ -254,7 +254,7 @@ bool OrderBookSim::placeOrder(const Order* _order) {
     }
     auto order = Order::make_intrusive(*_order);
 
-    asio::dispatch(m_strand,[self = shared_from_this(), order]() {  
+    asio::dispatch(*m_request.runContextPtr,[self = shared_from_this(), order]() {
         self->_placeOrder(order); });
     return true;
 }
@@ -333,7 +333,7 @@ bool OrderBookSim::placeAlgoOrder(const Order* _order, float executeDuration /*=
         return false;
     }
 
-    asio::dispatch(m_strand, 
+    asio::dispatch(*m_request.runContextPtr,
         [self = shared_from_this(), order = Order::make_intrusive(*_order),executeDuration, isPriceLimit]() {
 
             if (auto it = self->m_algoKey2OrderUpdateCallBack.find(order->algoOrderId); it != self->m_algoKey2OrderUpdateCallBack.end()) {
@@ -360,7 +360,7 @@ bool OrderBookSim::cacelAlgoOrder(const OrderId_t& orderId) {
 void OrderBookSim::onDelayTest(agcommon::TimeCost& delay) {
 
     auto self = shared_from_this();
-    asio::post(m_strand, [self,this, delay]() mutable {
+    asio::post(*m_request.runContextPtr, [self,this, delay]() mutable {
 
         size_t totals = localOrderId2Order.size();
 
@@ -385,7 +385,7 @@ bool OrderBookSim::cancelOrderByOrderId(const OrderId_t& orderId) {
     if (isStopped()) {
         return false;
     }
-    asio::dispatch(m_strand, [self = shared_from_this(), orderId]() {  self->_cancelOrderWithOrderId(orderId); });
+    m_request.runContextPtr->dispatch([self = shared_from_this(), orderId]() {  self->_cancelOrderWithOrderId(orderId); });
     return true;
 }
 
@@ -404,7 +404,7 @@ bool OrderBookSim::_cancelOrderWithOrderId(const OrderId_t& orderId){
             return false;
         }
 
-        SPDLOG_INFO("[OrderCancel][{}]symbol:{},qty:{},filled:{}",order->symbol, order->orderId, order->orderQty, order->filledQty);
+        SPDLOG_INFO("[OrderCancel][{}]symbol:{},qty:{},filled:{}", order->orderId, order->symbol, order->orderQty, order->filledQty);
 
         if (not agcommon::OrderStatus::isFinalStatus(order->status)) {
             Order preOrder = *order;
@@ -480,7 +480,7 @@ void OrderBookSim::_onOrderUpdate(Order* order) {
         }
     }
 
-    OrderService::getInstance().onOrderUpdate(order);
+    OrderService::getInstance().publishOrderUpdate(order);
 }
 
 void OrderBookSim::_onTrade(Trade* trade) {
@@ -519,16 +519,16 @@ void OrderBookSim::_onTrade(Trade* trade) {
         }
     }
 
-    OrderService::getInstance().onTrade(trade);
+    OrderService::getInstance().publishTrade(trade);
 }
 
-/* run on m_strand*/
+/* m_request.runContextPtr runs only in one thread */
 void OrderBookSim::onMarketDepth(MarketDepth* md) {
 
     if (isStopped())
         return;
 
-    asio::dispatch(m_strand, [self=shared_from_this(), md = MarketDepthKeepAlivePtr(md)]() {
+    asio::dispatch(*m_request.runContextPtr, [self=shared_from_this(), md = MarketDepthKeepAlivePtr(md)]() {
 
         //agcommon::TimeCost tc(fmt::format("{},{}",agcommon::getDateTimeStr(md->quoteTime), md->price));
 
@@ -634,6 +634,7 @@ void OrderBookSim::simOrderMatchFill(UnFinishedOrderMap::iterator& it, const Mar
     trade->orderId = orderId;
     trade->acctType = order->acctType;
     trade->acct     = order->acct;
+    trade->brokerId = order->brokerId;
     trade->symbol    = order->symbol;
     trade->tradeSide = order->tradeSide;
     trade->price = 0;

@@ -223,7 +223,8 @@ namespace agcommon {
         }
 
         static bool isInMarketContinueTradingTime(const posix_time::ptime& refTime = posix_time::second_clock::local_time()) {
-            return refTime >= getMarketOpenTime(refTime) && refTime <= getClosingCallAuctionBeginTime(refTime);
+            return   refTime >= getMarketOpenTime(refTime) && refTime <= getClosingCallAuctionBeginTime(refTime) 
+                and not (refTime > getMarketMorningCloseTime(refTime) and refTime < getMarketAfternoonOpenTime(refTime));
         }
 
         static bool isInMarketTime(const posix_time::ptime& refTime = posix_time::second_clock::local_time()) {
@@ -364,6 +365,8 @@ namespace agcommon {
 
     uint64_t  getTimeInt(const posix_time::ptime& pt);
 
+    std::optional<posix_time::ptime>  replaceDate(const posix_time::ptime& pt, uint32_t date);
+
     uint64_t getTotalMilliSeconds();
 
     std::string getDateTimeStr(const posix_time::ptime& pt);
@@ -502,5 +505,14 @@ namespace agcommon {
         return default_value;
     }
 
-
 } // namespace common
+
+
+template<>
+struct fmt::formatter<QuoteTime_t> : fmt::formatter<std::string>
+{
+    auto format(const QuoteTime_t& input, format_context& ctx) const -> decltype(ctx.out())
+    {
+        return fmt::format_to(ctx.out(), "{}", agcommon::getDateTimeStr(input));
+    }
+};

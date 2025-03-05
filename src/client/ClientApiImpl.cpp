@@ -62,11 +62,11 @@ int ClientApiImpl::updateAlgoInstance(const AlgoMsg::MsgAlgoInstanceUpdateReques
 	return m_sendContext->send(AlgoMsg::CMD_AlgoInstanceUpdateRequest, &request, request.request_id());
 }
 
-int ClientApiImpl::queryAlgoInstance(const AlgoMsg::MsgAlgoInstanceQueryRequest& request) {
+int ClientApiImpl::queryAlgoPerformance(const AlgoMsg::MsgAlgoPerformanceQueryRequest& request) {
 	if (auto ret = checkStatus(); ret != 0) {
 		return ret;
 	}
-	return m_sendContext->send(AlgoMsg::CMD_AlgoInstanceQueryRequest, &request, request.request_id());
+	return m_sendContext->send(AlgoMsg::CMD_AlgoPerformanceQueryRequest, &request, request.request_id());
 }
 
 int ClientApiImpl::queryOrder(const AlgoMsg::MsgOrderQueryRequest& request) {

@@ -86,7 +86,7 @@ const SecurityInfoHashMap StockDataManager::getSecurityBlockInfo(const uint32_t 
 }
 
 const SecurityInfoHashMap StockDataManager::getSecurityBlockInfo(const uint32_t trade_dt, const std::string& specialName) {
-    // 1:hs300 2 zz500 4 zz1000
+
     auto index_tag = -1;
 
     std::unordered_set<int> securityTypeSets;
@@ -97,37 +97,39 @@ const SecurityInfoHashMap StockDataManager::getSecurityBlockInfo(const uint32_t 
 
     if (specialName == "hs300") {
         result.reserve(300);
-        index_tag = 1;
+        index_tag = h5data::IndexTag::HS300;
     }
     else if (specialName == "zz500") {
         result.reserve(500);
-        index_tag = 2;
+        index_tag = h5data::IndexTag::ZZ500;
     }
     else if (specialName == "zz1000") {
         result.reserve(1000);
-        index_tag = 4;
+        index_tag = h5data::IndexTag::ZZ1000;
     }
     else if (specialName == "All") {
 
         result.reserve(8000);
-        securityTypeSets.insert(1);
-        //securityTypeSets.insert(2);
-        securityTypeSets.insert(8);
+        securityTypeSets.insert(h5data::SecurityType::STOCK);
+        securityTypeSets.insert(h5data::SecurityType::CONVERTBOND);
     }
 
     else if (specialName == "Stock") {
         result.reserve(6000);
-        securityTypeSets.insert(1);
+        securityTypeSets.insert(h5data::SecurityType::STOCK);
     }
 
     else if (specialName == "Conbond") {
         result.reserve(1000);
-        securityTypeSets.insert(8);
+        securityTypeSets.insert(h5data::SecurityType::CONVERTBOND);
     }
     else if (specialName == "other") {
         result.reserve(5000);
         for (auto& [s, ssinfo] : securityStaticInfos) {
-            if (ssinfo->securityType == 1 and ssinfo->belongIndex != 1 and ssinfo->belongIndex != 2 and ssinfo->belongIndex != 4) {
+            if (ssinfo->securityType == h5data::SecurityType::STOCK and 
+                ssinfo->belongIndex != h5data::IndexTag::HS300 and 
+                ssinfo->belongIndex != h5data::IndexTag::ZZ500 and 
+                ssinfo->belongIndex != h5data::IndexTag::ZZ1000) {
                 result.emplace(s, ssinfo);
             }
         }
@@ -199,14 +201,14 @@ const SecurityInfoHashMap StockDataManager::cacheSecurityStaticInfo(const int tr
 
                 auto ssinfo = std::make_shared<SecurityStaticInfo>(symbol);
 
-                ssinfo->SecurityName = stockInfo.sec_name;
-                ssinfo->tradeDate = stockInfo.trade_date;
-                ssinfo->adjFactor = stockInfo.adj_factor;
-                ssinfo->securityType = stockInfo.sec_type;
-                ssinfo->highLimitPrice = stockInfo.upper_limit;
-                ssinfo->lowLimitPrice = stockInfo.lower_limit;
-                ssinfo->preClosePrice = stockInfo.pre_close;
-                ssinfo->isSuspended = false;
+                ssinfo->SecurityName    = stockInfo.sec_name;
+                ssinfo->tradeDate       = stockInfo.trade_date;
+                ssinfo->adjFactor       = stockInfo.adj_factor;
+                ssinfo->securityType    = stockInfo.sec_type;
+                ssinfo->highLimitPrice  = stockInfo.upper_limit;
+                ssinfo->lowLimitPrice   = stockInfo.lower_limit;
+                ssinfo->preClosePrice   = stockInfo.pre_close;
+                ssinfo->isSuspended     = false;
 
                 if (stockInfo.is_suspended == 1 or ssinfo->delistedDate <= trade_dt) {
                     ssinfo->isSuspended = true;
@@ -218,7 +220,11 @@ const SecurityInfoHashMap StockDataManager::cacheSecurityStaticInfo(const int tr
                 ssinfo->underlyingSymbol = stockInfo.underlying_symbol;
                 ssinfo->totalShares = stockInfo.ttl_shr;
                 ssinfo->unLAShare = stockInfo.a_shr_unl;
-
+                if (ssinfo->securityType == h5data::SecurityType::STOCK and 
+                    (ssinfo->totalShares == 0 or ssinfo->unLAShare == 0 or stockInfo.pre_close==0.0)) {
+                    SPDLOG_WARN("ssinfo field missing!{},{},totalShares:{},unLAShare:{},preClose:{:.3f}", trade_dt, symbol
+                        , ssinfo->totalShares, ssinfo->unLAShare,stockInfo.pre_close);
+                }
                 securityStaticInfoMap.insert({ symbol,ssinfo });
             }
         }
@@ -233,33 +239,18 @@ const std::unordered_set<Symbol_t> StockDataManager::getIndexConstituents(const 
 
     auto securityStaticInfos = getSecurityBlockInfo(trade_dt);
 
-    auto index_tag = -1;
-
-    if (indexName == "hs300") {
-        symbols.reserve(300);
-		index_tag = 1;
-	}
-    else if (indexName == "zz500") {
-        symbols.reserve(500);
-		index_tag = 2;
-	}
-    else if (indexName == "zz1000") {
-        symbols.reserve(1000);
-		index_tag = 4;
-	}
-    else if (indexName == "other") {
-        symbols.reserve(4000);
-        index_tag = -9;
-    }
-    else {
-		SPDLOG_ERROR("indexSymbol:{} not supported", indexName);
+    auto [index_tag, size] = getIndexName2Tag(indexName);
+    symbols.reserve(size);
+    
+    if(index_tag<0) {
+		SPDLOG_ERROR("indexName:{} not supported", indexName);
 		return symbols;
 	}
 
     for (const auto& [symbol, ssinfo] : securityStaticInfos) {
 
         if (ssinfo == nullptr) {
-            SPDLOG_ERROR("{}, has nullptr securityStaticInfo",symbol);
+            SPDLOG_ERROR("{},{}, has nullptr securityStaticInfo", trade_dt,symbol);
             continue;
         }
         if (index_tag > 0) {
@@ -270,7 +261,10 @@ const std::unordered_set<Symbol_t> StockDataManager::getIndexConstituents(const 
         }
         else {
             // other stocks 
-            if (ssinfo->securityType ==1 and ssinfo->belongIndex != 1 and ssinfo->belongIndex != 2 and ssinfo->belongIndex != 4) {
+            if (ssinfo->securityType == h5data::SecurityType::STOCK and 
+                ssinfo->belongIndex != h5data::IndexTag::HS300 and
+                ssinfo->belongIndex != h5data::IndexTag::ZZ500 and
+                ssinfo->belongIndex != h5data::IndexTag::ZZ1000) {
                 symbols.insert(symbol);
             }
         }
@@ -292,7 +286,7 @@ const uint32_t StockDataManager::getNextTradeDate(const uint32_t trade_dt) {
     if (it != tradeCalendar.end()) {
         return it->second.next_trade_date;
     }
-    return 0;
+    return 19700101;
 }
 
 const uint32_t StockDataManager::getPreTradeDate(const uint32_t trade_dt) {
@@ -306,8 +300,10 @@ const uint32_t StockDataManager::getPreTradeDate(const uint32_t trade_dt) {
     if (it != tradeCalendar.end()) {
         return it->second.pre_trade_date;
     }
-    return 0;
+    return 19700101;
 }
+
+/*0 :[end_date,end_date],N:[T-N,T] */
 const uint32_t StockDataManager::getPreTradeDate_N(const uint32_t end_date,const std::size_t lastN) {
 
     std::scoped_lock lock(m_mutex);
@@ -361,10 +357,13 @@ const std::set<uint32_t> StockDataManager::getTradeDateInts(const uint32_t begin
     
     std::set<uint32_t> result;
 
-    auto lower = tradeCalendar.lower_bound(begin_date);
-    auto upper = tradeCalendar.upper_bound(end_date);
+    if (begin_date > end_date) {
+        return result;
+    }
 
-    for (auto it = lower; it != upper; it++) {
+    auto lower = tradeCalendar.lower_bound(begin_date);
+
+    for (auto it = lower; it->second.date <= end_date; it++) {
         if(it->second.date == it->second.trade_date)
             result.insert(it->second.trade_date);
     }
@@ -475,24 +474,16 @@ const Symbol2DailyBarHashMap StockDataManager::getDailyBarBlock(const uint32_t t
 const Symbol2DailyBarHashMap StockDataManager::getDailyBarBlock(const uint32_t trade_dt, const std::string& indexName) {
 
     auto dailyBar = getDailyBarBlock(trade_dt);
-    int index_tag = 0;
+
     Symbol2DailyBarHashMap result;
 
-    if (indexName == "hs300") {
-        result.reserve(300);
-        index_tag = 1;
-    }
-    else if (indexName == "zz500") {
-        result.reserve(500);
-        index_tag = 2;
-    }
-    else if (indexName == "zz1000") {
-        result.reserve(1000);
-        index_tag = 4;
-    }
-    else if (indexName == "zz1000") {
-        result.reserve(1000);
-        index_tag = 4;
+
+    auto [index_tag, size] = getIndexName2Tag(indexName);
+    result.reserve(size);
+
+    if (index_tag < 0) {
+        SPDLOG_ERROR("indexName:{} not supported", indexName);
+        return result;
     }
 
     for (auto& [s, bar] : dailyBar) {
@@ -503,8 +494,25 @@ const Symbol2DailyBarHashMap StockDataManager::getDailyBarBlock(const uint32_t t
     return result;
 }
 
+const Symbol2DailyBarHashMap StockDataManager::getDailyBarBlock(const uint32_t trade_dt, const std::unordered_set<int>& securityTypes) {
+
+    auto dailyBar = getDailyBarBlock(trade_dt);
+
+    Symbol2DailyBarHashMap result;
+
+    for (auto& [s, bar] : dailyBar) {
+        if (securityTypes.contains(bar->securityType)) {
+            result.emplace(s, bar);
+        }
+    }
+    return result;
+}
+
 const Symbol2DailyBarHashMap StockDataManager::cacheDailyBar(const int trade_dt) {
 
+    if (trade_dt > agcommon::getDateInt(agcommon::now())) {
+        return Symbol2DailyBarHashMap{};
+    }
     agcommon::TimeCost tc(std::format("cacheDailyBar {}", trade_dt));
 
     auto fileName = agcommon::Configs::getConfigs().getDailyBarFile().string();
@@ -700,12 +708,6 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
     std::string startDateStr = agcommon::geISODateStr(startTime); //yyyymmdd
     std::string endDateStr   = agcommon::geISODateStr(endTime);
 
-    auto addOnSeconds  = endTime > marketCloseAuctionBeginTime ? 185 : 30;
-
-    auto startTime_30 = agcommon::AshareMarketTime::addMarketDuration(startTime, -30);
-
-    auto endTime_30   = agcommon::AshareMarketTime::addMarketDuration(endTime, addOnSeconds);
-
     auto tickH5FilePath = agcommon::Configs::getConfigs().getTickH5Dir();
 
     if (not std::filesystem::exists(tickH5FilePath)) {
@@ -770,7 +772,7 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
 
                 for (const auto& tick : ticks) {
                     auto quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick.created_at);
-                    if (quoteTime > startTime_30 and quoteTime < endTime_30) {
+                    if (quoteTime >= startTime and quoteTime <= endTime) {
                         if (quoteTime > mc and quoteTime < ao) {
                             continue;
                         }
@@ -801,58 +803,50 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
 
     SPDLOG_INFO("read Tick {} symbols:{}-{},lines:{}"
         , symbols.size()
-        , agcommon::getDateTimeStr(startTime_30), agcommon::getDateTimeStr(endTime_30)
+        , agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime)
         , totalLines
         );
 
     return totalLines;
 }
 
-
 size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& symbols
     , const QuoteTime_t& startTime
     , const QuoteTime_t& endTime
-    , std::map<QuoteTime_t, UnorderMarketDepthMap>& quoteTime2Symbol2md)
-{
-    auto marketCloseAuctionBeginTime = agcommon::AshareMarketTime::getClosingCallAuctionBeginTime(endTime);
-    std::string startDateStr = agcommon::geISODateStr(startTime); //yyyymmdd
-    std::string endDateStr   = agcommon::geISODateStr(endTime);
-
-    auto addOnSeconds = endTime > marketCloseAuctionBeginTime ? 185 : 30;
-
-    auto startTime_30 = agcommon::AshareMarketTime::addMarketDuration(startTime, -30);
-
-    auto endTime_30   = agcommon::AshareMarketTime::addMarketDuration(endTime, addOnSeconds);
-
-    auto tickH5FilePath = agcommon::Configs::getConfigs().getTickH5Dir();
-
-    if (not std::filesystem::exists(tickH5FilePath)) {
-
-        SPDLOG_ERROR("Tick H5 Dir DOESNOT EXISTS:{}", tickH5FilePath);
-        return 0;
-    }
-
-    auto dir = std::filesystem::directory_iterator(tickH5FilePath);
-
-    size_t totalLines = 0;
-    std::vector<h5data::Tick> ticks(5000);
-
-    for (const auto& file : std::filesystem::directory_iterator(dir))
-    {
-        auto filePath = file.path().string();
-        auto fileName = file.path().filename().string();
-        if (fileName.size() < 11) {
-            continue;
+    , boost::unordered_map<Symbol_t, std::map<QuoteTime_t,MarketDepthKeepAlivePtr>>& symbol2quoteTime2md)
+{        
+        auto marketCloseAuctionBeginTime = agcommon::AshareMarketTime::getClosingCallAuctionBeginTime(endTime);
+        std::string startDateStr = agcommon::geISODateStr(startTime); //yyyymmdd
+        std::string endDateStr   = agcommon::geISODateStr(endTime);
+    
+        auto tickH5FilePath = agcommon::Configs::getConfigs().getTickH5Dir();
+    
+        if (not std::filesystem::exists(tickH5FilePath)) {
+    
+            SPDLOG_ERROR("Tick H5 Dir DOESNOT EXISTS:{}", tickH5FilePath);
+            return 0;
         }
-        auto dt = fileName.substr(fileName.size() - 11).substr(0, 8);
-
-        if (file.is_regular_file() and fileName.ends_with(".h5") and fileName.starts_with("Tick") and dt >= startDateStr and dt <= endDateStr)
+    
+        auto dir = std::filesystem::directory_iterator(tickH5FilePath);
+    
+        size_t totalLines = 0;
+        std::vector<h5data::Tick> ticks(5000);
+        auto files = std::filesystem::directory_iterator(dir);
+    
+        for (const auto& file : files)
         {
-            std::string h5file = filePath;
-            try {
-                HighFive::File pfile(h5file, HighFive::File::ReadOnly);
-
-                //SPDLOG_INFO("OPEN {}", filePath);
+            auto fileNameWithPath = file.path().string();
+            auto fileName = file.path().filename().string();
+            if (fileName.size() < 11) {
+                continue;
+            }
+            auto dt = fileName.substr(fileName.size() - 11).substr(0, 8);
+    
+            if (file.is_regular_file() and fileName.ends_with(".h5") and fileName.starts_with("Tick") and dt >= startDateStr and dt <= endDateStr)
+            {
+    
+                HighFive::File pfile(fileNameWithPath, HighFive::File::ReadOnly);
+    
                 auto tmp = agcommon::parseDateTimeStr(dt + "T093000");
                 if (not tmp) {
                     continue;
@@ -862,60 +856,268 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
                 auto mc = agcommon::AshareMarketTime::getMarketMorningCloseTime(refTime);
                 auto ao = agcommon::AshareMarketTime::getMarketAfternoonOpenTime(refTime);
                 auto ac = agcommon::AshareMarketTime::getMarketCloseTime(refTime);
+    
                 //SPDLOG_INFO("{},{},{},{}", agcommon::getDateTimeStr(mo), agcommon::getDateTimeStr(mc), agcommon::getDateTimeStr(ao), agcommon::getDateTimeStr(ac));
-                auto dtint = agcommon::get_int(dt);
+                auto dtint   = agcommon::get_int(dt);
                 auto ssinfos = getSecurityBlockInfo(dtint);
-
+    
                 for (auto& symbol : symbols) {
+    
                     auto ssinfo_it = ssinfos.find(symbol);
                     if (ssinfo_it == ssinfos.end()) {
                         continue;
                     }
                     auto& ssinfo = ssinfo_it->second;
                     auto dataSetName = symbolH5Key(symbol);
-
+    
                     if (not pfile.exist(dataSetName)) {
                         SPDLOG_WARN("dataset not exist {},{}", dt, dataSetName);
                         continue;
                     }
-
+    
                     auto dataset = pfile.getDataSet(dataSetName);
                     std::vector<size_t> dims = dataset.getDimensions();
-
+    
                     dataset.read<std::vector<h5data::Tick>>(ticks);
                     SPDLOG_DEBUG("file:{},dataSet:{},date:{},length:{},closePrice:{:.3f}", fileName, dataSetName, dt, dims[0], ssinfo->preClosePrice);
-
+    
                     for (const auto& tick : ticks) {
                         auto quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick.created_at);
-                        if (quoteTime > startTime_30 and quoteTime < endTime_30) {
+                        if (quoteTime >= startTime and quoteTime <= endTime) {
                             if (quoteTime > mc and quoteTime < ao) {
                                 continue;
                             }
-                            const auto tickPtr = &tick;
-                            auto it = quoteTime2Symbol2md.find(quoteTime);
-                            if (it == quoteTime2Symbol2md.end()) {
-                                auto& it = quoteTime2Symbol2md[quoteTime];
-                                it.reserve(symbols.size() / 10);
-                                it.emplace(std::piecewise_construct,
-                                    std::forward_as_tuple(symbol),
-                                    std::forward_as_tuple(tickPtr, ssinfo->preClosePrice, ssinfo->unLAShare));
-                            }
-                            else {
-                                it->second.emplace(std::piecewise_construct,
-                                    std::forward_as_tuple(symbol),
-                                    std::forward_as_tuple(tickPtr, ssinfo->preClosePrice, ssinfo->unLAShare));
-                            }
+                            auto md = MarketDepth::make_intrusive(&tick, ssinfo->preClosePrice, ssinfo->unLAShare);
+    
+                            auto [qit, qInserted] = symbol2quoteTime2md.try_emplace(md->symbol);
+    
+                            auto& qutoeTime2md = qit->second;
+    
+                            auto sit = qutoeTime2md.try_emplace(qutoeTime2md.end(),md->quoteTime, md);
+
+                            ++totalLines;
                         }
                     }
-                    totalLines += dims[0];
+    
                     ticks.clear();
                 }
             }
-            catch (std::exception e) {
-                SPDLOG_ERROR("{}", e.what());
-                return 0;
-            }
         }
-    }
-    return totalLines;
+    
+        SPDLOG_INFO("read Tick {} symbols:{}-{},lines:{}"
+            , symbols.size()
+            , agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime)
+            , totalLines
+            );
+    
+        return totalLines;
+ }
+
+
+ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& symbols
+     , const QuoteTime_t& startTime
+     , const QuoteTime_t& endTime
+     , std::map<QuoteTime_t, UnorderMarketDepthPtrMap>& quoteTime2Symbol2mdPtr)
+ {
+     auto marketCloseAuctionBeginTime = agcommon::AshareMarketTime::getClosingCallAuctionBeginTime(endTime);
+     std::string startDateStr = agcommon::geISODateStr(startTime); //yyyymmdd
+     std::string endDateStr = agcommon::geISODateStr(endTime);
+
+     auto tickH5FilePath = agcommon::Configs::getConfigs().getTickH5Dir();
+
+     if (not std::filesystem::exists(tickH5FilePath)) {
+
+         SPDLOG_ERROR("Tick H5 Dir DOESNOT EXISTS:{}", tickH5FilePath);
+         return 0;
+     }
+
+     auto dir = std::filesystem::directory_iterator(tickH5FilePath);
+
+     size_t totalLines = 0;
+     std::vector<h5data::Tick> ticks(5000);
+     auto files = std::filesystem::directory_iterator(dir);
+
+     for (const auto& file : files)
+     {
+         auto fileNameWithPath = file.path().string();
+         auto fileName = file.path().filename().string();
+         if (fileName.size() < 11) {
+             continue;
+         }
+         auto dt = fileName.substr(fileName.size() - 11).substr(0, 8);
+
+         if (file.is_regular_file() and fileName.ends_with(".h5") and fileName.starts_with("Tick") and dt >= startDateStr and dt <= endDateStr)
+         {
+
+             HighFive::File pfile(fileNameWithPath, HighFive::File::ReadOnly);
+
+             auto tmp = agcommon::parseDateTimeStr(dt + "T093000");
+             if (not tmp) {
+                 continue;
+             }
+             auto& refTime = *tmp;
+             auto mo = agcommon::AshareMarketTime::getOpeningCallAuctionBeginTime(refTime);
+             auto mc = agcommon::AshareMarketTime::getMarketMorningCloseTime(refTime);
+             auto ao = agcommon::AshareMarketTime::getMarketAfternoonOpenTime(refTime);
+             auto ac = agcommon::AshareMarketTime::getMarketCloseTime(refTime);
+
+             //SPDLOG_INFO("{},{},{},{}", agcommon::getDateTimeStr(mo), agcommon::getDateTimeStr(mc), agcommon::getDateTimeStr(ao), agcommon::getDateTimeStr(ac));
+             auto dtint = agcommon::get_int(dt);
+             auto ssinfos = getSecurityBlockInfo(dtint);
+
+             for (auto& symbol : symbols) {
+
+                 auto ssinfo_it = ssinfos.find(symbol);
+                 if (ssinfo_it == ssinfos.end()) {
+                     continue;
+                 }
+                 auto& ssinfo = ssinfo_it->second;
+                 auto dataSetName = symbolH5Key(symbol);
+
+                 if (not pfile.exist(dataSetName)) {
+                     SPDLOG_WARN("dataset not exist {},{}", dt, dataSetName);
+                     continue;
+                 }
+
+                 auto dataset = pfile.getDataSet(dataSetName);
+                 std::vector<size_t> dims = dataset.getDimensions();
+
+                 dataset.read<std::vector<h5data::Tick>>(ticks);
+                 SPDLOG_DEBUG("file:{},dataSet:{},date:{},length:{},closePrice:{:.3f}", fileName, dataSetName, dt, dims[0], ssinfo->preClosePrice);
+
+                 for (const auto& tick : ticks) {
+                     auto quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick.created_at);
+                     if (quoteTime >= startTime and quoteTime <= endTime) {
+                         if (quoteTime > mc and quoteTime < ao) {
+                             continue;
+                         }
+                         auto md = MarketDepth::make_intrusive(&tick, ssinfo->preClosePrice, ssinfo->unLAShare);
+
+                         auto [qit, qInserted] = quoteTime2Symbol2mdPtr.try_emplace(quoteTime);
+
+                         auto& symbol2Md = qit->second;
+
+                         if (qInserted) {
+                             symbol2Md.reserve(symbols.size() / 10);
+                         }
+                         symbol2Md.try_emplace(md->symbol,md);
+
+                         ++totalLines;
+                     }
+                 }
+
+                 ticks.clear();
+             }
+         }
+     }
+
+     SPDLOG_INFO("read Tick {} symbols:{}-{},lines:{}"
+         , symbols.size()
+         , agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime)
+         , totalLines
+     );
+
+     return totalLines;
 }
+//
+//size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& symbols
+//    , const QuoteTime_t& startTime
+//    , const QuoteTime_t& endTime
+//    , std::map<QuoteTime_t, UnorderMarketDepthMap>& quoteTime2Symbol2md)
+//{
+//    auto marketCloseAuctionBeginTime = agcommon::AshareMarketTime::getClosingCallAuctionBeginTime(endTime);
+//    std::string startDateStr = agcommon::geISODateStr(startTime); //yyyymmdd
+//    std::string endDateStr   = agcommon::geISODateStr(endTime);
+//
+//    auto tickH5FilePath = agcommon::Configs::getConfigs().getTickH5Dir();
+//
+//    if (not std::filesystem::exists(tickH5FilePath)) {
+//
+//        SPDLOG_ERROR("Tick H5 Dir DOESNOT EXISTS:{}", tickH5FilePath);
+//        return 0;
+//    }
+//
+//    auto dir = std::filesystem::directory_iterator(tickH5FilePath);
+//
+//    size_t totalLines = 0;
+//    std::vector<h5data::Tick> ticks(5000);
+//
+//    for (const auto& file : std::filesystem::directory_iterator(dir))
+//    {
+//        auto filePath = file.path().string();
+//        auto fileName = file.path().filename().string();
+//        if (fileName.size() < 11) {
+//            continue;
+//        }
+//        auto dt = fileName.substr(fileName.size() - 11).substr(0, 8);
+//
+//        if (file.is_regular_file() and fileName.ends_with(".h5") and fileName.starts_with("Tick") and dt >= startDateStr and dt <= endDateStr)
+//        {
+//            std::string h5file = filePath;
+//            try {
+//                HighFive::File pfile(h5file, HighFive::File::ReadOnly);
+//
+//                //SPDLOG_INFO("OPEN {}", filePath);
+//                auto tmp = agcommon::parseDateTimeStr(dt + "T093000");
+//                if (not tmp) {
+//                    continue;
+//                }
+//                auto& refTime = *tmp;
+//                auto mo = agcommon::AshareMarketTime::getOpeningCallAuctionBeginTime(refTime);
+//                auto mc = agcommon::AshareMarketTime::getMarketMorningCloseTime(refTime);
+//                auto ao = agcommon::AshareMarketTime::getMarketAfternoonOpenTime(refTime);
+//                auto ac = agcommon::AshareMarketTime::getMarketCloseTime(refTime);
+//                //SPDLOG_INFO("{},{},{},{}", agcommon::getDateTimeStr(mo), agcommon::getDateTimeStr(mc), agcommon::getDateTimeStr(ao), agcommon::getDateTimeStr(ac));
+//                auto dtint = agcommon::get_int(dt);
+//                auto ssinfos = getSecurityBlockInfo(dtint);
+//
+//                for (auto& symbol : symbols) {
+//                    auto ssinfo_it = ssinfos.find(symbol);
+//                    if (ssinfo_it == ssinfos.end()) {
+//                        continue;
+//                    }
+//                    auto& ssinfo = ssinfo_it->second;
+//                    auto dataSetName = symbolH5Key(symbol);
+//
+//                    if (not pfile.exist(dataSetName)) {
+//                        SPDLOG_WARN("dataset not exist {},{}", dt, dataSetName);
+//                        continue;
+//                    }
+//
+//                    auto dataset = pfile.getDataSet(dataSetName);
+//                    std::vector<size_t> dims = dataset.getDimensions();
+//
+//                    dataset.read<std::vector<h5data::Tick>>(ticks);
+//                    SPDLOG_DEBUG("file:{},dataSet:{},date:{},length:{},closePrice:{:.3f}", fileName, dataSetName, dt, dims[0], ssinfo->preClosePrice);
+//
+//                    for (const auto& tick : ticks) {
+//                        auto quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick.created_at);
+//                        if (quoteTime >= startTime and quoteTime <= endTime) {
+//                            if (quoteTime > mc and quoteTime < ao) {
+//                                continue;
+//                            }
+//                            const auto tickPtr = &tick;
+//
+//                            auto [qit, qInserted] = quoteTime2Symbol2md.try_emplace(quoteTime);
+//                            auto& symbol2Md = qit->second;
+//
+//                            if (qInserted) {
+//                                symbol2Md.reserve(symbols.size() / 10);
+//                            }
+//                            symbol2Md.emplace(std::piecewise_construct,
+//                                std::forward_as_tuple(symbol),
+//                                std::forward_as_tuple(tickPtr, ssinfo->preClosePrice, ssinfo->unLAShare));    
+//                        }
+//                    }
+//                    totalLines += dims[0];
+//                    ticks.clear();
+//                }
+//            }
+//            catch (std::exception e) {
+//                SPDLOG_ERROR("{}", e.what());
+//                return 0;
+//            }
+//        }
+//    }
+//    return totalLines;
+//}

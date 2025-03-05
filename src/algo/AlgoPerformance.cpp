@@ -104,6 +104,7 @@ void AlgoPerformance::onOrderRecUpdateTwo(const Order& order, const Order& preOr
     qtyFilled += (order.filledQty - preOrder.filledQty);
     amtFilled += order.filledAmt - preOrder.filledAmt;
     avgPrice = qtyFilled > 0 ? amtFilled / qtyFilled : 0.0;
+
     if (order.filledQty - preOrder.filledQty>0){
         lastFilledTime = order.updTime;
     }
@@ -160,15 +161,15 @@ int AlgoPerformance::getQtyAtLimitPrice(double limitPrice) {
 
 bool AlgoPerformance::checkAllowMakePolicy(const MarketDepth& md) const {
 
-    double Threshold_filledRate = 60.0;
-    double Threshold_worstCancelRate = 40.0;
+    double Threshold_filledRate      =  AlgoConstants::Allow_Make_Threshold_FilledRate;
+    double Threshold_worstCancelRate =  AlgoConstants::Allow_Make_Threshold_CancelRate;
     if (isLowPrice()) {
-        Threshold_filledRate = 30;
-        Threshold_worstCancelRate = 50;
+        Threshold_filledRate      = AlgoConstants::Allow_Make_Threshold_FilledRate_LowPrice;
+        Threshold_worstCancelRate = AlgoConstants::Allow_Make_Threshold_CancelRate_LowPrice;
     }
-    auto e_orderCnt = orderCnt - orderCntRejected + 1;
+    auto e_orderCnt      = orderCnt - orderCntRejected + 1;
     auto worstCancelRate = e_orderCnt > 0 ? (e_orderCnt - orderCntFilled) * 100.0 / e_orderCnt : 0.0;
-    if (orderCnt > 10) {
+    if (orderCnt > AlgoConstants::Allow_Make_Condition_OrderCnt) {
         if (worstCancelRate > Threshold_worstCancelRate and filledRate < Threshold_filledRate) {
             return false;
         }
@@ -178,21 +179,16 @@ bool AlgoPerformance::checkAllowMakePolicy(const MarketDepth& md) const {
 }
 
 bool AlgoPerformance::checkShouldTakePolicy(const MarketDepth& md) const {
-    double Threshold_filledRate = 50.0;
-    double Threshold_timeProgress = 0.15;
+    double Threshold_filledRate   = AlgoConstants::Should_Take_Threshold_FilledRate;
+    double Threshold_timeProgress = AlgoConstants::Should_Take_Condition_TimeProgress;
     if (isLowPrice()) {
-        Threshold_filledRate = 30;
-        Threshold_timeProgress = 0.2;
+        Threshold_filledRate   = AlgoConstants::Should_Take_Threshold_FilledRate_LowPrice;
+        Threshold_timeProgress = AlgoConstants::Should_Take_Condition_TimeProgress_LowPrice;
     }
-    if (orderCnt > 6 or timeProgress > Threshold_timeProgress) {
+    if (orderCnt > AlgoConstants::Should_Take_Condition_OrderCnt or timeProgress > Threshold_timeProgress) {
         if (filledRate < Threshold_filledRate) {
             return true;
         }
-        //auto d = agcommon::getMarketDuration( lastOrderTime, md->quoteTime);
-        //if (d > 90) {
-        //    SPDLOG_INFO("[{}]index,lastOrderTime:{},quoteTime:{}",algoOrderId,boost::posix_time::to_iso_string(lastOrderTime), boost::posix_time::to_iso_string(md->quoteTime));
-        //    return true;
-        //}
     }
 
     return false;
@@ -258,7 +254,7 @@ std::pair<int, int> AlgoPerformance::getQtyPendingAtBestPrice(const MarketDepth*
     return std::make_pair(0, 0);
     int qtyAtBest = 0;
     int qtyOutOfBest = 0;
-    //std::cout << "getQtyPendingAtBestPrice:" << orderId2Order.size() << std::endl;
+
     if (isBuy) {
         for (const auto& [orderId, order] : orderId2Order) {
             qtyAtBest += order->orderPrice == md->bidPrice1 && !order->isFinalStatus() ? (order->orderQty - order->filledQty) : 0;

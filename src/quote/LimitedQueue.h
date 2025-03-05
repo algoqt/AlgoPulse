@@ -3,6 +3,8 @@
 #include <deque>
 #include "MarketDepth.h"
 
+class ShotConfirm;
+
 class LimitedQueue {
 
 public:
@@ -27,7 +29,7 @@ public:
 
     void resetLow(const MarketDepthKeepAlivePtr& newMd);
 
-    bool triggerShotMinMax(MarketDepth* _newMd, double rangeRatePercent = 2.0, double durationConfig = 300);
+    bool shotConfirm(MarketDepth* _newMd, double rangeRatePercent = 2.0, double durationConfig = 300, ShotConfirm* sc = nullptr);
 
     inline std::pair<double, double> getShotAmount() const {
 
@@ -87,4 +89,5 @@ public:
     double referPeriodAvgPrice = 0;
     double referPeriodFlow     = 0.0;
 
+    int64_t trigVol = 0;
 };

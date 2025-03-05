@@ -3,6 +3,8 @@
 #include "OrderBook.h"
 #include "common.h"
 #include "TCPSession.h"
+#include "ranges"
+#include <algorithm>
 
 using namespace agcommon;
 
@@ -40,17 +42,21 @@ AlgoErrorMessage_t ShotTrader::preStartCheck() {
     double Filter_MarketCap_Lower = algoOrderPtr->getOrDefault("Filter_MarketCap_Lower", 0);
     double Filter_MarketCap_Upper = algoOrderPtr->getOrDefault("Filter_MarketCap_Upper", 500);
     int    Filter_MaxLatest_Days = algoOrderPtr->getOrDefault("Filter_MaxLatest_Days", 10);
-    double Filter_MaxLatest_Return = algoOrderPtr->getOrDefault("Filter_MaxLatest_Return_Percent", 0)/100.0;
+    double Filter_MaxLatest_Return = algoOrderPtr->getOrDefault("Filter_MaxLatest_Return_Percent", -100.0)/100.0;
+    double Filter_MaxLatest_Range  = algoOrderPtr->getOrDefault("Filter_MaxLatest_Range_Percent", -100.0) / 100.0;
 
     double underWater           = algoOrderPtr->getOrDefault("Filter_UnderWater_Percent", 0)/100.0;
     double aboveWater           = algoOrderPtr->getOrDefault("Filter_AboveWater_Percent", 0)/100.0;
 
     auto& dataSource = StockDataManager::getInstance();
-    auto treadeDate_lastN   = dataSource.getPreTradeDate_N(tradeDate, Filter_MaxLatest_Days);
-    auto treadeDate_last    = dataSource.getPreTradeDate_N(tradeDate, 1);
+    //auto treadeDate_lastN   = dataSource.getPreTradeDate_N(tradeDate, Filter_MaxLatest_Days);
+    //auto treadeDate_last    = dataSource.getPreTradeDate_N(tradeDate, 1);
 
-    auto dailyBar_lastN     = dataSource.getDailyBarBlock(treadeDate_lastN);
-    auto dailyBar_base      = dataSource.getDailyBarBlock(treadeDate_last);
+    //auto dailyBar_lastN     = dataSource.getDailyBarBlock(treadeDate_lastN);
+    //auto dailyBar_base      = dataSource.getDailyBarBlock(treadeDate_last);
+
+    nextTradeDate     = dataSource.getNextTradeDate(tradeDate);
+    preTradeDate      = dataSource.getPreTradeDate(tradeDate);
 
     if (algoOrderPtr->isParentOrder) {
         SPDLOG_INFO("{}", algoOrderPtr->to_string());
@@ -58,53 +64,71 @@ AlgoErrorMessage_t ShotTrader::preStartCheck() {
 
     if (symbols.size() == 0) {  //  algoOrderPtr->symbol = specialName
 
+        //symbols = StockDataManager::getInstance().filterRetrunRangeUpper(Filter_MaxLatest_Days, Filter_MaxLatest_Range, preTradeDate);// filterReturnTop(5, 1500, preTradeDate);
+        //localSecurityInfoMap = StockDataManager::getInstance().getSecurityInfoBatch(symbols,tradeDate);
         localSecurityInfoMap = StockDataManager::getInstance().getSecurityBlockInfo(tradeDate, algoOrderPtr->symbol);
         
         if (localSecurityInfoMap.size() == 0) {
             return std::format("{} invalid stock range:{}", tradeDate, algoOrderPtr->symbol);
         }
+        auto tmpSymbolSet = std::unordered_set<Symbol_t>();
+        for (const auto& pair : localSecurityInfoMap) {
+            tmpSymbolSet.insert(pair.first);
+        }
+        auto treadeDate_lastN = dataSource.getPreTradeDate_N(tradeDate, Filter_MaxLatest_Days);
+
+        auto symbol2feature = StockDataManager::getInstance().getStockReturnRange(treadeDate_lastN, preTradeDate, tmpSymbolSet);
+
         for (auto& [s, ssinfo] : localSecurityInfoMap) {
-
-            if (not dailyBar_lastN.contains(s)) {
-                continue;
-            }
-            double adjfactor = ssinfo->adjFactor;
-            auto&  dailyBar_Nth = dailyBar_lastN[s];
-            double adjClose_Nth = dailyBar_Nth->close * dailyBar_Nth->adjFactor;
-            double return_lastN = dailyBar_Nth->close > 0 ? (ssinfo->preClosePrice * adjfactor) / adjClose_Nth - 1 : 0;
-
-            SPDLOG_DEBUG("[aId:{}]symbol:{},preClosePrice:{:.2f},today_adjFactor:{:.3f},window_adjFactor:{:.3f},close:{:.2f},return_lastN:{:.2f}"
-                , algoOrderPtr->algoOrderId,ssinfo->symbol, ssinfo->preClosePrice, adjfactor, dailyBar_Nth->adjFactor, dailyBar_Nth->close, return_lastN);
             
-            double marketCap = ssinfo->unLAShare * ssinfo->preClosePrice / 1e8;
+            double marketCap = (double)ssinfo->unLAShare * ssinfo->preClosePrice / 1e8;
 
             if ((not ssinfo->isSuspended) and ssinfo->listedDate<tradeDate and ssinfo->delistedDate>tradeDate) {
-                auto check1 = true;
+                auto check_marketcap = true;
                 if (Filter_MarketCap_Upper > 0) {
-                    check1 = marketCap <= Filter_MarketCap_Upper and marketCap >= Filter_MarketCap_Lower;
+                    check_marketcap = marketCap <= Filter_MarketCap_Upper and marketCap >= Filter_MarketCap_Lower;
                 }
-                auto check2 = Filter_MaxLatest_Return != 0 ? return_lastN < Filter_MaxLatest_Return : true;
-                auto check3 = true;
+                auto check_return = true;
+                auto check_range = true;
+
+                auto& return_and_Range = symbol2feature[s];
+
+                if (Filter_MaxLatest_Return != -1.0) {
+                    if (return_and_Range.first > Filter_MaxLatest_Return) {
+                        check_return = false;
+                    }
+                } 
+                if (Filter_MaxLatest_Range != -1.0) {
+                    if (return_and_Range.second > Filter_MaxLatest_Range) {
+                        check_range = false;
+                    }
+                }
+                auto check_water = true;
 
                 if (algoOrderPtr->isBackTestOrder()) {
                     auto dailyBar = dataSource.getDailyBar(s,tradeDate);
                     if (dailyBar) {
                         if (underWater > 0) {
-                            check3 = dailyBar->low  < ssinfo->preClosePrice  * (1.0 - underWater);
+                            check_water = dailyBar->low  < ssinfo->preClosePrice  * (1.0 - underWater);
                         }
                         if (aboveWater > 0) {
-                            check3 = dailyBar->high > ssinfo->preClosePrice  * (1.0 + aboveWater);
+                            check_water = dailyBar->high > ssinfo->preClosePrice  * (1.0 + aboveWater);
                         }
                     }
                 }
                 
-                if (check1 and check2 and check3) {
+                if (check_marketcap and check_return and check_water and check_range) {
+
+                    //SPDLOG_INFO("[aId:{}]symbol:{},preClosePrice:{:.3f},adjFactor:{:.3f},return_N:{:.4f},range:{:.4f}"
+                    //    , algoOrderPtr->algoOrderId, ssinfo->symbol, ssinfo->preClosePrice, ssinfo->adjFactor
+                    //    , retRange.first, retRange.second);
+
                     symbols.insert(ssinfo->symbol);
                 }
             }
             else {
-                SPDLOG_DEBUG("[aId:{}]symbol {} isSuspended:{},listedDate:{},dellistedDate:{},marketCap:{:.2f},return_lastN:{:.3f}", algoOrderPtr->algoOrderId,
-                    ssinfo->symbol, ssinfo->isSuspended, ssinfo->listedDate, ssinfo->delistedDate, marketCap, return_lastN);
+                SPDLOG_DEBUG("[aId:{}]symbol {} isSuspended:{},listedDate:{},dellistedDate:{},marketCap:{:.2f}", algoOrderPtr->algoOrderId,
+                    ssinfo->symbol, ssinfo->isSuspended, ssinfo->listedDate, ssinfo->delistedDate, marketCap);
             }
         }
     }
@@ -112,7 +136,6 @@ AlgoErrorMessage_t ShotTrader::preStartCheck() {
         localSecurityInfoMap = dataSource.getSecurityInfoBatch(symbols, tradeDate);
     }
     
-    nextTradeDate = dataSource.getNextTradeDate(tradeDate);
     if (symbols.size() == 0) {
         return "symbols has 0 size!";
     }
@@ -162,7 +185,18 @@ asio::awaitable<void> ShotTrader::start() {
     }
     else {
 
-        QuoteFeedRequest df_req(algoOrderPtr->getQuoteMode(), algoOrderPtr->algoOrderId, symbols, algoOrderPtr->startTime, algoOrderPtr->endTime, contextPtr);
+        auto yes_startTime = agcommon::replaceDate(algoOrderPtr->startTime, preTradeDate);
+        auto yes_endTime = agcommon::replaceDate(algoOrderPtr->endTime, preTradeDate);
+
+        if (yes_startTime.has_value() and yes_endTime.has_value()) {
+            auto tickCount = StockDataManager::getInstance().cacheFromH5Tick(symbols, *yes_startTime, *yes_endTime, symbol2quoteTime2md_yesterday);
+        }
+
+        QuoteFeedRequest df_req(algoOrderPtr->getQuoteMode()
+            , algoOrderPtr->algoOrderId
+            , symbols
+            , algoOrderPtr->startTime, algoOrderPtr->endTime
+            , contextPtr);
         auto quoteFeedPtr = QuoteFeedService::getInstance().createQuoteFeed(df_req, algoPerf.errMsg);
 
         if (!quoteFeedPtr) {
@@ -281,10 +315,11 @@ void ShotTrader::onSubTaskBackTestDone(const std::shared_ptr<ShotTrader>& trader
     asio::dispatch(*contextPtr, [this, trader_ptr]() {
 
         for (const auto& [symbol, sss] : trader_ptr->symbol2Signals) {
-            auto& vec = symbol2Signals[symbol];
+            auto& map = symbol2Signals[symbol];
             for (auto& [id,ss] : sss) {
                 ss->algoOrderId = trader_ptr->algoOrderPtr->parentAlgoOrderId;
-                vec.insert({ id,ss });
+                map.insert({ id,ss });
+                //ss->release();
             }
         }
         trader_ptr->symbol2Signals.clear();
@@ -346,7 +381,6 @@ void ShotTrader::stop(const std::string& reason) {
         for (const auto& [symbol, sss] : symbol2Signals) {
             for (const auto& [id,ss] : sss) {
                 SPDLOG_INFO(ss->to_string());
-                ss->signal_at_md->release();
             }
         }
     }
@@ -360,10 +394,15 @@ void ShotTrader::release() {
         queue->release();
     }
     symbol2MdQueue.clear();
-
+    symbol2quoteTime2md_yesterday.clear();
+    boost::unordered_map<Symbol_t, std::map<QuoteTime_t, MarketDepthKeepAlivePtr>> tmp;
+    symbol2quoteTime2md_yesterday.swap(tmp);
     orderBookPtr = nullptr;
     quoteFeedPtr = nullptr;
 
+    if (algoOrderPtr->isParentOrder) {
+        symbol2Signals.clear();
+    }
     return;
 }
 
@@ -447,6 +486,8 @@ void ShotTrader::algoShot(MarketDepth* md) {
         double aboveWater        = algoOrderPtr->getOrDefault("Filter_AboveWater_Percent", 0.0)/100.0;
         double SHOT_Watch_Window_Range_Percent = algoOrderPtr->getOrDefault("SHOT_Watch_Window_Range_Percent", 2.0);
         double SHOT_Confirm_Duration_Seconds = algoOrderPtr->getOrDefault("SHOT_Confirm_Duration_Seconds", 60.0 * 5);
+        double SHOT_Watch_Window_TurnRate_Percent = algoOrderPtr->getOrDefault("SHOT_Watch_Window_TurnRate_Percent", 0.0);
+        double SHOT_Watch_Window_Return = algoOrderPtr->getOrDefault("SHOT_Watch_Window_Return_Percent", -100.0)/100.0;
 
         auto base_md = mdQueue->get_item(0);
 
@@ -478,16 +519,31 @@ void ShotTrader::algoShot(MarketDepth* md) {
                 return;
             }
         }
+        ShotConfirm sc;
+        auto isConfirm = mdQueue->shotConfirm(md, SHOT_Watch_Window_Range_Percent, SHOT_Confirm_Duration_Seconds,&sc);
 
-        bool istrig = mdQueue->triggerShotMinMax(md, SHOT_Watch_Window_Range_Percent, SHOT_Confirm_Duration_Seconds);
-
-        if (istrig) {
+        if (isConfirm) {
 
             double midPrice     = base_md->getMidPrice();
             double shotChange   = mdQueue->getShotChageRate();
-            double shotDuration = AshareMarketTime::getMarketDuration(base_md->quoteTime, md->quoteTime);
+            //double shotDuration = AshareMarketTime::getMarketDuration(base_md->quoteTime, md->quoteTime);
 
             double buyPrice = std::max(md->price, md->askPrice1);
+            auto& yes_mds   = symbol2quoteTime2md_yesterday[md->symbol];
+            double compare_tr = 0.0;
+            auto  compare_quoteTime = agcommon::now();
+            MarketDepthKeepAlivePtr yes_md = nullptr;
+
+            auto yes_quoteTime = agcommon::parseDateTimeStr(std::format("{} {}",preTradeDate,agcommon::getTimeStr(md->quoteTime)));
+            if (yes_quoteTime.has_value()) {
+                auto yes_it = yes_mds.lower_bound(*yes_quoteTime);
+
+                if (yes_it != yes_mds.begin()) {
+                    yes_md = yes_it->second;
+                    compare_tr = yes_md->turnRate;
+                    compare_quoteTime = yes_md->quoteTime;
+                }
+            }
 
             std::size_t times = signalMap.size() + 1;
 
@@ -499,6 +555,29 @@ void ShotTrader::algoShot(MarketDepth* md) {
                 else {
                     return;
                 }
+                auto shotTurnRate    = sc.shotVol * 1.0 / md->volume * md->turnRate;
+
+                auto confirmTurnRate = mdQueue->shotPeriodVol * 1.0 / md->volume * md->turnRate;
+
+                if( (compare_tr>0 and md->turnRate < compare_tr *1.2)
+                    or (shotTurnRate < SHOT_Watch_Window_TurnRate_Percent)
+                    or (md->price < md->avgPrice)
+                    or (SHOT_Watch_Window_Return!=-1.0 and shotChange < SHOT_Watch_Window_Return)
+                    ) {
+                    SPDLOG_WARN("[aid:{}]symbol:{},[price:{:.3f},avgPrice:{:.3f}][qt:{},tr:{:.3f}]vs[qt:{},tr:{:.3f}]shotTr:{:.3f},confirmTr:{:.3f},thres_tr:{:.3f}", algoOrderPtr->algoOrderId, md->symbol
+                        , md->price, md->avgPrice
+                        , md->quoteTime, md->turnRate, compare_quoteTime, compare_tr
+                        , shotTurnRate, confirmTurnRate, SHOT_Watch_Window_TurnRate_Percent);
+                    return;
+                }
+                SPDLOG_INFO("[aid:{}]symbol:{},[price:{:.3f},avgPrice:{:.3f}][qt:{},tr:{:.3f}]vs[qt:{},tr:{:.3f}]shotTr:{:.3f},confirmTr:{:.3f},thres_tr:{:.3f}", algoOrderPtr->algoOrderId, md->symbol
+                    , md->price, md->avgPrice
+                    , md->quoteTime, md->turnRate, compare_quoteTime, compare_tr
+                    , shotTurnRate, confirmTurnRate, SHOT_Watch_Window_TurnRate_Percent);
+                //if( shotTurnRate < SHOT_Watch_Window_TurnRate) {
+                //    SPDLOG_INFO("[aid:{}]{} {},{} vs {} ", algoOrderPtr->algoOrderId, md->symbol, md->quoteTime, md->turnRate, shotTurnRate);
+                //    return;
+                //}
                 auto ss = std::make_shared<ShotSignal>(algoOrderPtr->algoOrderId, md);
 
                 ss->nextDay  = nextTradeDate;
@@ -508,12 +587,12 @@ void ShotTrader::algoShot(MarketDepth* md) {
                 if (md->preClose > 0)
                     ss->openReturn = (md->open / md->preClose - 1) * 100;
 
-                ss->sigShotAmt     = shotAmt / 10000.0;
-                ss->sigShotChange  = shotChange;
-                ss->sigShotDuration = shotDuration;
+                ss->sigShotAmt      = shotAmt / 10000.0;
+                ss->sigShotChange   = shotChange;
+                ss->sigShotDuration = sc.confirmDuration;
                 ss->sigShotFlow     = mdQueue->shotPeriodFlow / 10000;
-                ss->sigShotTr       = mdQueue->shotPeriodVol * 1.0 / md->volume * md->turnRate;
-
+                ss->sigShotTr       = shotTurnRate;
+                ss->sigConfirmTr    = confirmTurnRate;
                 ss->sigArrivePrice  = md->price;
                 ss->sigArriveChange = md->changeP;
                 ss->buyPrice = md->askPrice1;
@@ -525,7 +604,7 @@ void ShotTrader::algoShot(MarketDepth* md) {
 
                 ss->cnt = times;
                 ss->totalTr = md->turnRate;
-
+                ss->sc = sc;
                 if (ssinfo) {
                     ss->description = ssinfo->getIndexBelongName();
                 }
@@ -549,6 +628,7 @@ void ShotTrader::algoShot(MarketDepth* md) {
                 SPDLOG_INFO("[SHOTS]{}", ss->to_string());
 
                 publishSignalMessage(ss.get());
+
             }
         }
     }
@@ -711,6 +791,9 @@ void ShotTrader::publishSignalMessage(const ShotSignal* ss) const {
     msgPtr->set_cnt(ss->cnt);
     msgPtr->set_total_tr(ss->totalTr);
     msgPtr->set_description(ss->description);
+    msgPtr->set_confirm_tr(ss->sigConfirmTr);
+    msgPtr->add_shotmdtimes(agcommon::getDateTimeInt(ss->sc.lowMdPtr->quoteTime));
+    msgPtr->add_shotmdtimes(agcommon::getDateTimeInt(ss->sc.highMdPtr->quoteTime));
 
     auto shouldCache = AlgoStatus::isFinalStatus(algoPerf.algoStatus);
 

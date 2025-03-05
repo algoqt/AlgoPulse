@@ -71,20 +71,25 @@ std::shared_ptr<QuoteFeed> QuoteFeedService::createQuoteFeed(const QuoteFeedRequ
 
         auto quoteFeedPtr = std::make_shared<QuoteFeedReplay>(req);
 
-        auto st_str =  agcommon::getDateTimeStr(req.startTime);
-        auto end_str = agcommon::getDateTimeStr(req.endTime);
+        auto marketCloseAuctionBeginTime = agcommon::AshareMarketTime::getClosingCallAuctionBeginTime(req.endTime);
 
-        agcommon::TimeCost tc(std::format("[{}]read Tick {} symbols:{}-{}",req.algoOrderId,req.symbolSet.size(), st_str, end_str));
+        auto addOnSeconds = req.endTime > marketCloseAuctionBeginTime ? 185 : 30;
+
+        auto startTime_30 = agcommon::addDuration(req.startTime, -30);
+
+        auto endTime_30 = agcommon::addDuration(req.endTime, addOnSeconds);
+
+        agcommon::TimeCost tc(std::format("[{}]read Tick {} symbols:{}-{}", req.algoOrderId,req.symbolSet.size()
+            , agcommon::getDateTimeStr(startTime_30)
+            , agcommon::getDateTimeStr(endTime_30)));
         
         auto& dataSource = StockDataManager::getInstance();
 
-        auto lines = dataSource.cacheFromH5Tick(req.symbolSet, req.startTime, req.endTime, quoteFeedPtr->m_quoteTime2Symbol2md);
+        auto lines = dataSource.cacheFromH5Tick(req.symbolSet, startTime_30, endTime_30, quoteFeedPtr->m_quoteTime2Symbol2md);
         
         tc.timeAt(std::format(",readlines:{}",lines));
 
         if (quoteFeedPtr->m_quoteTime2Symbol2md.size() == 0) {
-
-            algoErrMessage = std::format("symbols Data Range [{},{}] NOT FOUND.", st_str, end_str);
 
             return nullptr;
         }

@@ -29,7 +29,7 @@ public:
 
     virtual int updateAlgoInstance(const AlgoMsg::MsgAlgoInstanceUpdateRequest& request) = 0;
 
-    virtual int queryAlgoInstance(const AlgoMsg::MsgAlgoInstanceQueryRequest& request) = 0;
+    virtual int queryAlgoPerformance(const AlgoMsg::MsgAlgoPerformanceQueryRequest& request) = 0;
 
     virtual int queryOrder(const AlgoMsg::MsgOrderQueryRequest& request) = 0;
 
@@ -53,14 +53,14 @@ public:
     virtual void onUpdateAlgoInstance(const AlgoMsg::MsgAlgoInstanceUpdateResponse& msgAlgoInstanceUpdateResponse) {};
 
     // 执行信息
-    virtual void onQueryAlgoInstance(const AlgoMsg::MsgAlgoInstanceQueryResponse& msgAlgoInstanceQueryResponse) {};
+    virtual void onQueryAlgoPerformance(const AlgoMsg::MsgAlgoPerformanceQueryResponse& msgAlgoPerformanceQueryResponse) {};
 
     virtual void onQueryOrder(const AlgoMsg::MsgOrderQueryResponse& msgOrderQueryResponse) {};
 
     virtual void onQueryTrade(const AlgoMsg::MsgTradeQueryResponse& MsgOrderTradeQueryResponse) {};
 
     // 推送
-    virtual void onNotifyAlgoInstanceExecutionInfo(const AlgoMsg::MsgAlgoPerformance& msgAlgoPerformance) {};
+    virtual void onNotifyAlgoPerformance(const AlgoMsg::MsgAlgoPerformance& msgAlgoPerformance) {};
 
     virtual void OnNotifyOrderInfo(const AlgoMsg::MsgOrderInfo& msgOrderInfo) {};
 

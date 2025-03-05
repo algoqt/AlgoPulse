@@ -40,7 +40,10 @@ namespace agcommon {
 
             if (auto it = m_config.find(section); it != m_config.end()) {
                 auto& dict = it->second;
-                return dict.contains(section) ? dict.at(key) : defaultValue;
+                if (section == "DATACONFIG") {
+                    return dict.contains(key) ? m_h5FileDir + dict.at(key) : defaultValue;
+                }
+                return dict.contains(key) ? dict.at(key) : defaultValue;
             }
             return defaultValue;
         }
@@ -52,7 +55,7 @@ namespace agcommon {
 
             if (auto it = m_config.find(section); it != m_config.end()) {
                 auto& dict = it->second;
-                return dict.contains(section) ? agcommon::get_double(dict.at(key), defaultValue) : defaultValue;
+                return dict.contains(key) ? agcommon::get_double(dict.at(key), defaultValue) : defaultValue;
             }
             return defaultValue;
         }
@@ -63,7 +66,7 @@ namespace agcommon {
 
             if (auto it = m_config.find(section); it != m_config.end()) {
                 auto& dict = it->second;
-                return dict.contains(section) ? agcommon::get_int(dict.at(key), defaultValue) : defaultValue;
+                return dict.contains(key) ? agcommon::get_int(dict.at(key), defaultValue) : defaultValue;
             }
             return defaultValue;
         }

@@ -4,11 +4,19 @@
 #include "common.h"
 #include "MarketDepth.h"
 
+struct ShotConfirm {
+    MarketDepthKeepAlivePtr confirmMd = nullptr;
+    MarketDepthKeepAlivePtr lowMdPtr  = nullptr;
+    MarketDepthKeepAlivePtr highMdPtr = nullptr;
+    int64_t                 shotVol   = 0;
+    double                  confirmDuration = 0;
+};
+
 class ShotSignal {
 
 public:
 
-    explicit ShotSignal(const AlgoOrderId_t algoOrderId, MarketDepth* signal_at_md);
+    explicit ShotSignal(const AlgoOrderId_t algoOrderId, const MarketDepth* signal_at_md);
 
     OrderId_t   shotId;
 
@@ -27,7 +35,7 @@ public:
     double sigShotChange = 0.0;     /*SHOT 窗口期涨幅 */
     double sigShotDuration = 0.0;   /*窗口时长*/
     double sigShotTr = 0.0;         /*窗口换手率*/
-
+    double sigConfirmTr = 0.0;
     double sigArrivePrice = 0;      /*信号时最新价*/
     double sigArriveChange = 0;     /*信号时股票涨幅*/
 
@@ -51,13 +59,19 @@ public:
 
     std::vector<std::pair<std::string, double>> nextNDayClosePrice;
 
-    MarketDepthKeepAlivePtr signal_at_md;
+    ShotConfirm sc;
 
     void update(const MarketDepth* md, const bool useAvgTradePrice);
 
     std::string to_string() const;
 
+    void release() {
+        sc.confirmMd = nullptr;
+        sc.highMdPtr = nullptr;
+        sc.lowMdPtr = nullptr;
+    }
 };
+
 
 struct ShotPerformance {
 

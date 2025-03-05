@@ -3,6 +3,7 @@
 #include "typedefs.h"
 #include "common.h"
 #include <map>
+#include <google/protobuf/text_format.h>
 
 namespace asio = boost::asio;
 
@@ -19,22 +20,17 @@ public:
 		return instance;
 	}
 
-	AlgoErrorCode dispatchAlgoOrder(const std::shared_ptr<AlgoOrder>& algoOrder
-		, AlgoErrorMessage_t& algoErrMessage);
-
-	std::unordered_map<AlgoOrderId_t, std::shared_ptr<Trader>>   algoOrderId2AlgoTrader{};
-
 public:
 	
 	~AlgoService();
 
-	void start();
-
-	void stop();
-	
 private:
 
 	AlgoService();
+
+	void start();
+
+	void stop();
 
 	// net
 	void accept();
@@ -43,32 +39,27 @@ private:
 
 	void handleAccept(std::shared_ptr<TCPSession> new_connection,const boost::system::error_code& error);
 
+	// algoMessage dispatch
+	void dispatchAlgoMessage(const std::shared_ptr<TCPSession>& connection, std::unique_ptr<AlgoMsg::MessagePkg>&& recvPkgPtr);
+
 	// request handle
-	void dispatchAlgoRequest(const std::shared_ptr<TCPSession> connection,const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onLoginRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onStartAlgoInstanceRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onUpdateAlgoInstanceRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onAlgoInstanceFinished(const std::shared_ptr<Trader> trader_ptr,const std::exception_ptr ex);
+	// all Task_xxxx 
 
 public:
 
-	std::atomic<bool>	  m_isRunning	  { false };
+	std::atomic<bool>		m_isRunning	  { false };
 
-	std::atomic<uint32_t>  m_connectSeq{ 0 };
+	std::atomic<uint32_t>	m_connectSeq{ 0 };
 
-	std::atomic<uint64_t>  m_totalAlgoRequests{ 0 };
+	std::atomic<uint64_t>	m_totalAlgoRequests{ 0 };
 
-	std::atomic<uint64_t>  m_totalTraders{ 0 };
+	std::atomic<uint64_t>	m_totalTraders{ 0 };
 
-	std::atomic<uint64_t>  m_runningTraders{ 0 };
+	std::atomic<uint64_t>	m_runningTraders{ 0 };
 
-	std::string   m_ipstr;
+	std::string				m_ipstr;
 
-	std::uint32_t m_port;
+	std::uint32_t			m_port;
 
 	// net
 	std::shared_ptr<asio::io_context>				m_netAcceptcontextPtr{};
@@ -85,16 +76,9 @@ public:
 	std::vector<std::string>						m_workercontextKeys{};
 
 	// algo data
-	std::unordered_map<AlgoOrderId_t, std::shared_ptr<AlgoOrder>>	algoOrderId2AlgoOrder{};
-	//std::map<ClientAlgoOrderKey_t, AlgoOrder>						clientAlgoOrderId2AlgoOrder{};
+	std::unordered_map<AlgoOrderId_t, std::shared_ptr<Trader>>   algoOrderId2AlgoTrader{};
 
-	std::vector<std::shared_ptr<AlgoOrder>> createAlgoOrder(const AlgoMsg::MsgAlgoInstanceCreateRequest& req
-													, AlgoErrorMessage_t& algoErrorMessage);
-
-	AlgoErrorCode cancelAlgoOrder(const AlgoOrderId_t algoOrderId, AlgoErrorMessage_t& algoErrorMessage);
-
-
-	// only for bt request
+	// only for backtest request
 	std::deque<std::shared_ptr<Trader>>	m_algoTraderQueue_bt{}; // 回测请求队列
 	std::atomic<uint32_t>				m_runningTraders_bt;
 	std::atomic<uint32_t>				m_runningTraders_bt_costMutiContext;  // 

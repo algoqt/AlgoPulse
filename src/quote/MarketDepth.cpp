@@ -7,7 +7,7 @@ MarketDepth::MarketDepth(const Symbol_t& _symbol, const OrderTime_t& quoteTime )
     , quoteTime(quoteTime) {
 };
 
-MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int _share_circ) {
+MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ) {
 
     auto exchange = (agcommon::MarketExchange)tick->exchange;
 
@@ -19,6 +19,9 @@ MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int _share_c
 
     amount = tick->cum_amount;
     volume = tick->cum_volume;
+
+    avgPrice = volume > 0 ? amount / (double)volume : 0.0;
+
     open    = tick->open;
     low     = tick->low;
     high    = tick->high;
@@ -281,7 +284,7 @@ std::string MarketDepth::to_string() const {
     );
 }
 
-std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage(uint64_t subscribeKey) const{
+std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage() const{
     
     std::shared_ptr<AlgoMsg::MsgMarketDepth> msg = std::make_shared<AlgoMsg::MsgMarketDepth>();
     msg->set_symbol(symbol);
@@ -317,7 +320,6 @@ std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage(uint64_
     msg->set_ask_price5(askPrice5);
     msg->set_ask_vol5(askVol5);
     msg->set_turn_rate(turnRate);
-    msg->set_subscribe_key(subscribeKey);
 
     return msg;
 }

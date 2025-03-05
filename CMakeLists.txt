@@ -5,9 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 
-option(ENABLE_DELAY_STATS "Enable stats onMarketDepth callback TimeCost " OFF)
-option(OUTPUT_LOG_TO_STD_OUT "Enable output log to stdout for dev " ON)
-
 project(AlgoPulse)
 
 set(Boost_NO_WARN_NEW_VERSIONS 1)

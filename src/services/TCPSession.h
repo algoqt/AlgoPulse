@@ -8,7 +8,9 @@
 
 namespace asio = boost::asio;
 
-typedef asio::ip::tcp::socket::native_handle_type sockect_handel_t;
+class MarketDepth;
+
+using SocketId_t = uint32_t;
 
 typedef std::map<uint64_t, std::shared_ptr<AlgoMsg::MessagePkg>>	MessageContainer;
 
@@ -18,7 +20,7 @@ class TCPSession: public std::enable_shared_from_this<TCPSession>
 {
     friend class TCPSessionManager;
 
-    using AlgoMessagePkgHandle_t = std::function<void(const std::shared_ptr<TCPSession>, const AlgoMsg::MessagePkg&)>;
+    using AlgoMessagePkgHandle_t = std::function<void(const std::shared_ptr<TCPSession>, std::unique_ptr<AlgoMsg::MessagePkg>&&)>;
 
 public:
 
@@ -36,9 +38,8 @@ public:
 
     asio::ip::tcp::socket& socket();
 
-
 public:
-    explicit TCPSession(std::shared_ptr<asio::io_context> io_context);
+    explicit TCPSession(std::shared_ptr<asio::io_context> io_context,const SocketId_t socketId);
 
     ~TCPSession() = default;
 
@@ -50,7 +51,7 @@ private:
 
     asio::ip::tcp::socket             m_socket;
 
-    sockect_handel_t                  m_socketHandle = 0;
+    SocketId_t                        m_socketId = 0;
 
     AlgoMessagePkgHandle_t            onMessageHandler = nullptr;
 
@@ -58,9 +59,9 @@ private:
 
     std::vector<unsigned char>        m_sendingBuffer;
 
-    std::deque<std::shared_ptr<AlgoMsg::MessagePkg>>  sendingMessageQueue{};
+    std::deque<std::shared_ptr<AlgoMsg::MessagePkg>>  m_sendingMessageQueue{};
 
-    std::set<AcctKey_t>               loginAcctKeys{};
+    std::set<AcctKey_t>               m_loginAcctKeys{};
 
     void _send();
 
@@ -79,7 +80,7 @@ public:
         return instance;
     }
 
-    std::shared_ptr<TCPSession> createTCPSession(std::shared_ptr<asio::io_context> io_context);
+    std::shared_ptr<TCPSession> createTCPSession(std::shared_ptr<asio::io_context>& io_context);
 
     void closeAllSessions();
 
@@ -87,11 +88,13 @@ public:
 
     void reSend(const std::shared_ptr<TCPSession>& session, const AcctKey_t& acctKey,const AlgoMsg::MsgLoginRequest& request);
 
-    bool addTCPSession(std::shared_ptr<TCPSession>& session);
+    bool addLoginTCPSession(const AcctKey_t& acctKey, std::shared_ptr<TCPSession>& session);
 
     bool removeTCPSession(const std::shared_ptr<TCPSession>& session);
 
     bool isLogin(const AcctKey_t& acctKey);
+
+    bool isLogin(const std::shared_ptr<TCPSession>& session);
 
     void sendResp2C(const std::shared_ptr<TCPSession>& session
         , const AlgoMsg::MsgAlgoCMD cmd
@@ -106,7 +109,19 @@ public:
 
     void sendMessagesOffset(const std::shared_ptr<AlgoMsg::MessagePkg>&);
 
+    void timerJob();
+
     void printStatInfo();
+
+    std::string addMarketDepthSubscribe(const std::shared_ptr<TCPSession>& session,const AlgoMsg::MsgMarketDepthSubcribeRequest* req);
+
+    std::string addStockConceptQuoteSubscribe(const std::shared_ptr<TCPSession>& session,const AlgoMsg::MsgSubscribeStockConceptQuoteRequest* req);
+
+    void pushMarketDepth(MarketDepth* md);
+
+    void pushStockConceptQuotes();
+
+    void pushStockConceptInfos(const std::shared_ptr<TCPSession>& session);
 
 private:
 
@@ -119,21 +134,36 @@ private:
     asio::steady_timer                  m_timer;
     std::mutex                          m_mutex;
     std::atomic<uint64_t>               m_sentMessageCnt{0};
-    bool                                m_cacheAllMessage{ false };
+    std::atomic<SocketId_t>             m_autoId{ 0 };
 
-    std::map<sockect_handel_t, std::shared_ptr<TCPSession>>       TCPSessions{};
+    using SessionMap = std::unordered_map<SocketId_t, std::shared_ptr<TCPSession>>;
+
+    SessionMap                          m_tcpSessions{};
 
     std::unordered_map<AcctKey_t
-        , std::map<sockect_handel_t,std::shared_ptr<TCPSession>>
-        , AcctKey_t::Hash>                                         acctKey2TCPSessions{};
+        , SessionMap
+        , AcctKey_t::Hash>              m_acctKey2TCPSessions{};
 
     // message cache. retransmission from begin or last ackn message
-    MessageContainer                    messageId2Pkg{};
+    MessageContainer                    m_messageId2Pkg{};
 
-    std::unordered_map<AcctKey_t, std::map<uint64_t,MessageContainer::iterator>
-        , AcctKey_t::Hash>                                          acct2MessageIter{};
+    std::unordered_map<AcctKey_t
+        , std::map<uint64_t,MessageContainer::iterator>
+        , AcctKey_t::Hash>                                          m_acct2MessageIter{};
 
-    std::unordered_map<AcctKey_t, uint64_t,AcctKey_t::Hash>         acctSentAcknMaxMessageId{};
+    std::unordered_map<AcctKey_t, uint64_t,AcctKey_t::Hash>         m_acctSentAcknMaxMessageId{};
+
+    // session subscribe info
+    //std::unordered_map<SocketId_t, std::unordered_set<Symbol_t>>    m_session2MdSubsribe{};
+
+    std::unordered_map<Symbol_t, std::unordered_set<SocketId_t>>    m_subscribeSymbolMd{};
+
+    std::unordered_set<SocketId_t>                                  m_subsribeAllMd{};
+
+    std::unordered_set<SocketId_t>                                  m_subsribeConceptQuote{};
+
+
+private:
 
     void send(const std::shared_ptr<TCPSession>& session
         , const AcctKey_t& acctKey

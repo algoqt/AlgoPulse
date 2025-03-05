@@ -38,7 +38,7 @@ struct SubscribeOrder_t {
 class OrderBook: public std::enable_shared_from_this<OrderBook> {
 
 public:
-    OrderBook(const OrderBookRequest& req) :m_request(req), m_running(false), m_strand(*req.runContextPtr) {};
+    OrderBook(const OrderBookRequest& req) :m_request(req), m_running(false) {}; // , m_strand(*req.runContextPtr)
     ~OrderBook() = default;
     OrderBook(const OrderBook&) = delete;
     OrderBook(OrderBook&&)      = delete;
@@ -79,7 +79,7 @@ public:
 
     std::atomic<bool>               m_running{ false };
 
-    asio::io_context::strand        m_strand;
+    //asio::io_context::strand        m_strand;
 };
 
 

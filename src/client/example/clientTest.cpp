@@ -87,9 +87,9 @@ public:
         SPDLOG_INFO("onUpdateAlgoInstance:\n{}", msgAlgoInstanceUpdateResponse.DebugString());
     }
 
-    void onQueryAlgoInstance(const AlgoMsg::MsgAlgoInstanceQueryResponse& msgAlgoInstanceQueryResponse) override {
+    void onQueryAlgoPerformance(const AlgoMsg::MsgAlgoPerformanceQueryResponse& msgAlgoPerformanceQueryResponse) override {
 
-        SPDLOG_INFO("onQueryAlgoInstance:\n{}", msgAlgoInstanceQueryResponse.DebugString());
+        SPDLOG_INFO("onQueryAlgoInstance:\n{}", msgAlgoPerformanceQueryResponse.DebugString());
     };
 
     void onQueryOrder(const AlgoMsg::MsgOrderQueryResponse& msgOrderQueryResponse) override {
@@ -103,7 +103,7 @@ public:
     };
 
     // 推送
-    void onNotifyAlgoInstanceExecutionInfo(const AlgoMsg::MsgAlgoPerformance& msgAlgoPerformance) override {
+    void onNotifyAlgoPerformance(const AlgoMsg::MsgAlgoPerformance& msgAlgoPerformance) override {
 
         algoInstanceInfoMap[msgAlgoPerformance.algo_order_id()] = msgAlgoPerformance;
 
@@ -115,7 +115,7 @@ public:
             }
         }
         if(msgAlgoPerformance.algo_status() >= 6)
-            SPDLOG_INFO("onNotifyAlgoInstanceExecutionInfo:\n{}", msgAlgoPerformance.DebugString());
+            SPDLOG_INFO("onNotifyAlgoPerformance:\n{}", msgAlgoPerformance.DebugString());
     };
 
     void OnNotifyOrderInfo(const AlgoMsg::MsgOrderInfo& msgOrderInfo) override {
