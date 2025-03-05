@@ -368,7 +368,7 @@ void TCPSessionManager::sendNotify2C(const AcctKey_t& acctKey, const AlgoMsg::Ms
 
     if (messageBody) {
 
-        send(nullptr, acctKey, AlgoMsg::MsgDirection::CS_NTY, cmd, messageBody, shouldCache);
+       send(nullptr, acctKey, AlgoMsg::MsgDirection::CS_NTY, cmd, messageBody, shouldCache);
     }
 }
 
@@ -386,8 +386,6 @@ void TCPSessionManager::send(const std::shared_ptr<TCPSession>& session
         auto sendPkgPtr   = std::make_shared<AlgoMsg::MessagePkg>();
 
         auto messageSeqId = MessageIdGenerator::getInstance().NewId();
-
-        size_t bodySize   = messageBody->ByteSizeLong();
 
         sendPkgPtr->mutable_head()->set_msg_cmd(cmd);
         sendPkgPtr->mutable_head()->set_msg_direction(direction);

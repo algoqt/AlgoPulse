@@ -5,18 +5,23 @@ package AlgoMsg;
 // 账户类型
 enum AcctType {
   UnKnown         = 0;
-  N_STOCK         = 1;
+
+  N_STOCK         = 1;  //普通柜台
   N_CREDIT        = 2;
-  F_STOCK         = 3;
+
+  F_STOCK         = 3;  //极速柜台
   F_CREDIT        = 4;
-  SIMLIVE_STOCK   = 5;
+
+  SIMLIVE_STOCK   = 5;  //仿真模拟
   SIMLIVE_CREDIT  = 6;
-  SIMCUST_STOCK   = 7;
-  BT_STOCK        = 9;
+
+  SIMCUST_STOCK   = 7;  //自定义行情模拟
+  BT_STOCK        = 9;  //回测
 }
 
 // 供应商 ID
 enum MsgAlgoVendorId {
+
   VendorId_DEFAULT = 0;  // 本算法
   VendorId_OQ      = 1;  // 安信
   VendorId_XT      = 2;  // 迅投
@@ -94,10 +99,12 @@ enum MsgAlgoCMD {
   CMD_AlgoInstanceCreateResponse = 101;
   CMD_AlgoInstanceUpdateRequest  = 102;
   CMD_AlgoInstanceUpdateResponse = 103;
+
   CMD_AlgoOrderQueryRequest      = 104;
   CMD_AlgoOrderQueryResponse     = 105;
   CMD_AlgoInstanceQueryRequest   = 106;
   CMD_AlgoInstanceQueryResponse  = 107;
+
   CMD_OrderQueryRequest          = 108;
   CMD_OrderQueryResponse         = 109;
   CMD_TradeQueryRequest          = 110;
