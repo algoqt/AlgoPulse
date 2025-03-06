@@ -89,7 +89,7 @@ public:
 
     MarketDepth(const Symbol_t& _symbol,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
 
-    MarketDepth(const h5data::Tick* tick, float _preClose, int _share_circ = 0);
+    MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ = 0);
 
     std::vector<std::pair<double,int>> getAskQuotes() const;
 

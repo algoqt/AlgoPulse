@@ -7,7 +7,7 @@ MarketDepth::MarketDepth(const Symbol_t& _symbol, const OrderTime_t& quoteTime )
     , quoteTime(quoteTime) {
 };
 
-MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int _share_circ) {
+MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ) {
 
     auto exchange = (agcommon::MarketExchange)tick->exchange;
 

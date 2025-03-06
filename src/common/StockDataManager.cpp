@@ -218,7 +218,10 @@ const SecurityInfoHashMap StockDataManager::cacheSecurityStaticInfo(const int tr
                 ssinfo->underlyingSymbol = stockInfo.underlying_symbol;
                 ssinfo->totalShares = stockInfo.ttl_shr;
                 ssinfo->unLAShare = stockInfo.a_shr_unl;
-
+                if (ssinfo->totalShares == 0 or ssinfo->unLAShare == 0 or stockInfo.pre_close==0) {
+                    SPDLOG_WARN("ssinfo field missing!{},{},totalShares:{},unLAShare:{},preClose:{:.3f}", trade_dt, symbol
+                        , ssinfo->totalShares, ssinfo->totalShares,stockInfo.pre_close);
+                }
                 securityStaticInfoMap.insert({ symbol,ssinfo });
             }
         }
