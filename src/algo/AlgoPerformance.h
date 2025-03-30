@@ -104,6 +104,10 @@ public:
         if (benchmark <= 0.0 || algoAvPrice <= 0.0) {
             return 0.0;
         }
+
+        algoAvPrice = std::round(algoAvPrice * 10000.0) / 10000.0;
+        benchmark   = std::round(benchmark * 10000.0) / 10000.0;
+
         if (isBuy) {
             return (benchmark - algoAvPrice) / benchmark * 10000.0;
         }
@@ -111,6 +115,7 @@ public:
             return (algoAvPrice - benchmark) / benchmark * 10000.0;
         }
     }
+
     inline bool isLowPrice() const {
         return arrivePrice > 0 and arrivePrice < 6;
     }

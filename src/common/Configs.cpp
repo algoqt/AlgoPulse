@@ -17,6 +17,7 @@ static std::string trim(const std::string& str) {
 }
 
 static std::unordered_map<std::string, std::unordered_map<std::string, std::string>> parseINI(const std::string& filename) {
+
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> config;
     std::string line;
     std::string currentSection;
@@ -151,9 +152,17 @@ namespace agcommon {
         const AlgoMsg::MsgAlgoCategory& category){
 
         std::scoped_lock lock(m_mutex);
-        auto& categoryName = AlgoMsg::MsgAlgoCategory_Name(category);
 
+        auto& categoryName = AlgoMsg::MsgAlgoCategory_Name(category);
         return m_config[categoryName];
+
+        //auto it = m_config.find(categoryName);
+        //if (it == m_config.end()) {
+        //    SPDLOG_WARN("NOT CONFIG PARAMS FOR:{}", categoryName);
+        //    return std::unordered_map<std::string, std::string>();
+        //}
+        //return it->second;
     }
 
 }
+

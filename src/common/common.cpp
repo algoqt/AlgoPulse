@@ -194,7 +194,10 @@ namespace agcommon
     uint64_t  getTimeInt(const posix_time::ptime& pt) {
         return std::stoull(getTimeStr(pt));
     }
-    
+    std::optional<posix_time::ptime>  replaceDate(const posix_time::ptime& pt, uint32_t date) {
+
+        return parseDateTimeInteger(date*1000000LL + getTimeInt(pt));
+    }
 /*
     字符串按 单字符 delimiter 分割
 */

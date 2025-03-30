@@ -17,7 +17,7 @@ public:
 
     int updateAlgoInstance(const AlgoMsg::MsgAlgoInstanceUpdateRequest& request) override;
 
-    int queryAlgoInstance(const AlgoMsg::MsgAlgoInstanceQueryRequest& request) override;
+    int queryAlgoPerformance(const AlgoMsg::MsgAlgoPerformanceQueryRequest& request) override;
 
     int queryOrder(const AlgoMsg::MsgOrderQueryRequest& request) override;
 

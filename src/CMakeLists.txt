@@ -68,7 +68,7 @@ add_custom_command(
     COMMENT "Generating .pb.cc and .pb.h files from AlgoMessages.proto"
 )
 
-add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES})
+add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES} "services/Task.cpp" "services/Task_OnSubscribeMarketDepth.h" "services/Task_Register.h" "services/Task_OnLogin.h" "services/Task_onStartAlgoInstance.cpp" "services/Task_onUpdateAlgoInstance.h")
 add_subdirs_to_target_include_directories(algoPulse ${PROJECT_SOURCE_DIR})
 target_link_libraries(algoPulse Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
 
@@ -106,7 +106,7 @@ if(WIN32)
     add_custom_command(TARGET algoPulse POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying dependencies to ${TARGET_OUTPUT_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DEPENDENT_DLLS} ${TARGET_OUTPUT_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/../config/config.ini ${TARGET_OUTPUT_DIR}/../config
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/../config/config.ini ${TARGET_OUTPUT_DIR}/../config/config.ini
 )
 endif()
 

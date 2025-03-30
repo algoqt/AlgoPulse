@@ -36,32 +36,32 @@ public:
     double   changeP    {0};
 
     uint64_t volume     {0};
-    double  amount     {0};
+    double   amount     {0};
     double   avgPrice   {0};
 
     double   bidPrice1    {0};
-    int     bidVol1      {0};
+    int      bidVol1      {0};
 
     double   bidPrice2    {0};
-    int     bidVol2      {0};
+    int      bidVol2      {0};
     double   bidPrice3    {0};
-    int     bidVol3      {0};
+    int      bidVol3      {0};
     double   bidPrice4    {0};
-    int     bidVol4      {0};
+    int      bidVol4      {0};
     double   bidPrice5    {0};
-    int     bidVol5      {0};
+    int      bidVol5      {0};
 
     double   askPrice1    {0};
-    int     askVol1      {0};
+    int      askVol1      {0};
     double   askPrice2    {0};
-    int     askVol2      {0};
+    int      askVol2      {0};
     double   askPrice3    {0};
-    int     askVol3      {0};
+    int      askVol3      {0};
     double   askPrice4    {0};
-    int     askVol4      {0};
+    int      askVol4      {0};
     double   askPrice5    {0};
-    int     askVol5      {0};
-    double   turnRate     { 0.0 };
+    int      askVol5      {0};
+    double   turnRate     { 0.0 };  // %
 
     OrderTime_t quoteTime   { boost::posix_time::min_date_time};
 
@@ -121,5 +121,5 @@ public:
 
     std::string to_string() const;
 
-    std::shared_ptr<AlgoMsg::MsgMarketDepth> encode2AlgoMessage(uint64_t subscribeKey = 0) const;
+    std::shared_ptr<AlgoMsg::MsgMarketDepth> encode2AlgoMessage() const;
 };

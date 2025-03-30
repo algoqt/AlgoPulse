@@ -40,7 +40,7 @@ std::shared_ptr<OrderBook> OrderService::createOrderBookIfNotExist(const OrderBo
 			// each broker  one context
 			auto brokerContxt = fmt::format("OrderBookLive_broker_{}", req.orderBookKey.broker);
 
-			orderBookReq.runContextPtr = ContextService::getInstance().createContext(brokerContxt);
+			orderBookReq.runContextPtr = ContextService::getInstance().createContext(brokerContxt,1);
 
 			orderBookPtr = std::make_shared<OrderBookLive>(req);
 
@@ -182,13 +182,14 @@ bool OrderService::cancelOrderByOrderId(const OrderBookKey_t& orderBookKey, cons
 }
 
 
-void OrderService::onOrderUpdate(const Order* order) {
+void OrderService::publishOrderUpdate(const Order* order) {
 
 	auto msgPtr = std::make_shared<AlgoMsg::MsgOrderInfo>();
 
 	msgPtr->set_order_id(order->orderId);
 	msgPtr->set_acct(order->acct);
 	msgPtr->set_acct_type(order->acctType);
+
 	msgPtr->set_algo_order_id(order->algoOrderId);
 	msgPtr->set_order_time(agcommon::getDateTimeInt(order->orderTime));
 
@@ -220,7 +221,7 @@ void OrderService::onOrderUpdate(const Order* order) {
 	TCPSessionManager::getInstance().sendNotify2C(acctKey, AlgoMsg::CMD_NOTIFY_Order, msgPtr, shouldCache);
 }
 
-void OrderService::onTrade(const Trade* trade) {
+void OrderService::publishTrade(const Trade* trade) {
 
 	auto msgPtr = std::make_shared<AlgoMsg::MsgTradeInfo>();
 
@@ -248,18 +249,4 @@ void OrderService::onTrade(const Trade* trade) {
 
 	TCPSessionManager::getInstance().sendNotify2C(acctKey, AlgoMsg::CMD_NOTIFY_Trade, msgPtr,true);
 
-}
-
-void OrderService::testDelay(agcommon::TimeCost& delay) {
-
-	std::scoped_lock lock(m_mutex);
-
-	for (auto& [quoteMode, orderBooks] : q2RouterKey2OrderBook) {
-
-		for (auto& [orderBookKey, orderBook] : orderBooks) {
-
-			orderBook->onDelayTest(delay);
-			delay.logTimeCost();
-		}
-	}
 }

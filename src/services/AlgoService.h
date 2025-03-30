@@ -3,6 +3,7 @@
 #include "typedefs.h"
 #include "common.h"
 #include <map>
+#include <google/protobuf/text_format.h>
 
 namespace asio = boost::asio;
 
@@ -19,22 +20,17 @@ public:
 		return instance;
 	}
 
-	AlgoErrorCode dispatchAlgoOrder(const std::shared_ptr<AlgoOrder>& algoOrder
-		, AlgoErrorMessage_t& algoErrMessage);
-
-	std::unordered_map<AlgoOrderId_t, std::shared_ptr<Trader>>   algoOrderId2AlgoTrader{};
-
 public:
 	
 	~AlgoService();
 
-	void start();
-
-	void stop();
-	
 private:
 
 	AlgoService();
+
+	void start();
+
+	void stop();
 
 	// net
 	void accept();
@@ -43,16 +39,13 @@ private:
 
 	void handleAccept(std::shared_ptr<TCPSession> new_connection,const boost::system::error_code& error);
 
+
+	// algoMessage dispatch
+	void dispatchAlgoMessage(const std::shared_ptr<TCPSession>& connection, std::unique_ptr<AlgoMsg::MessagePkg>&& recvPkgPtr);
+
 	// request handle
-	void dispatchAlgoRequest(const std::shared_ptr<TCPSession> connection,const AlgoMsg::MessagePkg& recvPkgPtr);
+	// all Task_xxxx 
 
-	void onLoginRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onStartAlgoInstanceRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onUpdateAlgoInstanceRequest(const std::shared_ptr<TCPSession> connection, const AlgoMsg::MessagePkg& recvPkgPtr);
-
-	void onAlgoInstanceFinished(const std::shared_ptr<Trader> trader_ptr,const std::exception_ptr ex);
 
 public:
 
@@ -85,14 +78,7 @@ public:
 	std::vector<std::string>						m_workercontextKeys{};
 
 	// algo data
-	std::unordered_map<AlgoOrderId_t, std::shared_ptr<AlgoOrder>>	algoOrderId2AlgoOrder{};
-	//std::map<ClientAlgoOrderKey_t, AlgoOrder>						clientAlgoOrderId2AlgoOrder{};
-
-	std::vector<std::shared_ptr<AlgoOrder>> createAlgoOrder(const AlgoMsg::MsgAlgoInstanceCreateRequest& req
-													, AlgoErrorMessage_t& algoErrorMessage);
-
-	AlgoErrorCode cancelAlgoOrder(const AlgoOrderId_t algoOrderId, AlgoErrorMessage_t& algoErrorMessage);
-
+	std::unordered_map<AlgoOrderId_t, std::shared_ptr<Trader>>   algoOrderId2AlgoTrader{};
 
 	// only for bt request
 	std::deque<std::shared_ptr<Trader>>	m_algoTraderQueue_bt{}; // 回测请求队列

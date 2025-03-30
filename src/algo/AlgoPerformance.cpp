@@ -104,6 +104,7 @@ void AlgoPerformance::onOrderRecUpdateTwo(const Order& order, const Order& preOr
     qtyFilled += (order.filledQty - preOrder.filledQty);
     amtFilled += order.filledAmt - preOrder.filledAmt;
     avgPrice = qtyFilled > 0 ? amtFilled / qtyFilled : 0.0;
+
     if (order.filledQty - preOrder.filledQty>0){
         lastFilledTime = order.updTime;
     }

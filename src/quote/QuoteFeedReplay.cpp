@@ -162,21 +162,15 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
                     for (auto& [subKey, subMarketDepth] : subCallBackMap_it->second) {
                         SPDLOG_DEBUG("[{}]subMarketDepth:{}", subKey, md->to_string());
 
-                        if (subMarketDepth->publish2Client) {
-
-                            auto mdMessage = md->encode2AlgoMessage(subKey);
-
-                            TCPSessionManager::getInstance().sendNotify2C(subMarketDepth->acctKey, AlgoMsg::CMD_NOTIFY_MarketDepth, mdMessage,false);
-                        }
                         if (subMarketDepth->onMarketDepth) {
 
                             subMarketDepth->onMarketDepth(md);
                         }
                         if (subMarketDepth->co_onMarketDepth) {
 
-                            auto status = co_await subMarketDepth->co_onMarketDepth(md);
+                            auto algoStatus = co_await subMarketDepth->co_onMarketDepth(md);
 
-                            if (agcommon::AlgoStatus::isFinalStatus(status)) {
+                            if (agcommon::AlgoStatus::isFinalStatus(algoStatus)) {
                                 break;
                             }
                         }
@@ -187,7 +181,7 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
         }
     
         #if ENABLE_DELAY_STATS
-                testDelay<QuoteFeedReplay>(delay);
+            statDelay<QuoteFeedReplay>(delay);
         #endif // ENABLE_DELAY_TEST
 
     }
@@ -202,6 +196,9 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
 /*call getVWAP should in the same thread of QuoteFeedReplay's running m_strand */
 double QuoteFeedReplay::getVWAP(const Symbol_t& symbol, const QuoteTime_t& begTime, const QuoteTime_t& endTime) {
 
+    if (begTime > endTime) {
+        return 0.0;
+    }
     auto it_low = m_quoteTime2Symbol2md.lower_bound(begTime);
     auto it_up  = m_quoteTime2Symbol2md.upper_bound(endTime);  
 

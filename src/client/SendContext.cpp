@@ -403,9 +403,9 @@ void SendContext::onMessageHandle(const AlgoMsg::MessagePkg* recvPkg) {
             }
             break;
         }
-        case AlgoMsg::CMD_AlgoInstanceQueryResponse: {
+        case AlgoMsg::CMD_AlgoPerformanceQueryResponse: {
 
-            AlgoMsg::MsgAlgoInstanceQueryResponse resp;
+            AlgoMsg::MsgAlgoPerformanceQueryResponse resp;
 
             parseOK = resp.ParseFromArray(recvPkg->body().data(), recvPkg->body().length());
 
@@ -413,7 +413,7 @@ void SendContext::onMessageHandle(const AlgoMsg::MessagePkg* recvPkg) {
                 request_id = resp.request_id();
                 //messageStr = resp.DebugString();
                 if (m_clientSpi)
-                    m_clientSpi->onQueryAlgoInstance(resp);
+                    m_clientSpi->onQueryAlgoPerformance(resp);
             }
             break;
         }
@@ -442,7 +442,7 @@ void SendContext::onMessageHandle(const AlgoMsg::MessagePkg* recvPkg) {
                 //messageStr = notify.DebugString();
                 if (m_clientSpi)
 
-                    m_clientSpi->onNotifyAlgoInstanceExecutionInfo(notify);
+                    m_clientSpi->onNotifyAlgoPerformance(notify);
             }
             break;
         }

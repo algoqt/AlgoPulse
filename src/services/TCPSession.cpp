@@ -4,11 +4,13 @@
 #include "Order.h"
 #include "IdGenerator.h"
 #include "ContextService.h"
+#include "ConceptQuote.h"
 
-TCPSession::TCPSession(std::shared_ptr<asio::io_context> io_context)
+TCPSession::TCPSession(std::shared_ptr<asio::io_context> io_context, const SocketId_t socketId)
           :m_io_context(io_context)
           ,m_socket(*io_context)
-          ,m_strand(*io_context){
+          ,m_strand(*io_context)
+          ,m_socketId(socketId){
 
     m_receivingBuffer.reserve(1024);
 
@@ -23,7 +25,7 @@ void TCPSession::start(const AlgoMessagePkgHandle_t& handler)
 
     do_read_header();
 
-    m_socketHandle = m_socket.native_handle();
+    //m_socketHandle = m_socket.native_handle();
 
     auto ip = m_socket.remote_endpoint().address().to_string();
 
@@ -31,7 +33,7 @@ void TCPSession::start(const AlgoMessagePkgHandle_t& handler)
 
     //m_socket.set_option(asio::ip::tcp::no_delay(true));
 
-    SPDLOG_INFO("new TCPSession::started,socket:{},isOpen:{},remote_ep:{}:{}", (int)m_socketHandle,m_socket.is_open(), ip,port);
+    SPDLOG_INFO("new TCPSession::started,socket:{},isOpen:{},remote_ep:{}:{}", m_socketId,m_socket.is_open(), ip,port);
 }
 
 asio::ip::tcp::socket& TCPSession::socket(){
@@ -51,7 +53,7 @@ void TCPSession::do_read_header(){
             }
             else
             {   
-                SPDLOG_INFO("do_read_header,socket {} with error: {}", (int)self->m_socketHandle, ec.message());
+                SPDLOG_INFO("do_read_header,socket {} with error: {}", self->m_socketId, ec.message());
                 self->safeDisConnect();
             }
         });
@@ -78,11 +80,11 @@ void TCPSession::do_read_body(size_t body_length) {
             {
                 SPDLOG_DEBUG("body_length:{},bytes_transferred:{}", body_length, bytes_transferred);
 
-                AlgoMsg::MessagePkg recvPkgPtr;
+                auto recvPkgPtr = std::make_unique<AlgoMsg::MessagePkg>();
 
-                recvPkgPtr.ParseFromArray(self->m_receivingBuffer.data() + 4, (int)body_length);
+                recvPkgPtr->ParseFromArray(self->m_receivingBuffer.data() + 4, (int)body_length);
 
-                SPDLOG_INFO("recv msg_cmd:{},msg_seq_id:{},body_length:{}", (uint32_t)recvPkgPtr.head().msg_cmd(), recvPkgPtr.head().msg_seq_id(),body_length);
+                SPDLOG_INFO("recv msg_cmd:{},msg_seq_id:{},body_length:{}", (uint32_t)recvPkgPtr->head().msg_cmd(), recvPkgPtr->head().msg_seq_id(),body_length);
 
                 self->onMessageHandler(self, std::move(recvPkgPtr));
 
@@ -90,7 +92,7 @@ void TCPSession::do_read_body(size_t body_length) {
             }
             else
             {
-                SPDLOG_INFO("do_read_body,socket {} with error:{}", (int)self->m_socketHandle, ec.message());
+                SPDLOG_INFO("do_read_body,socket {} with error:{}", self->m_socketId, ec.message());
 
                 self->safeDisConnect();
             }
@@ -101,9 +103,9 @@ void TCPSession::queueSendMessage2C(const std::shared_ptr<AlgoMsg::MessagePkg>& 
 
     asio::post(m_strand, [self= shared_from_this(), pkgPtr]() {
 
-        self->sendingMessageQueue.emplace_back( pkgPtr);
+        self->m_sendingMessageQueue.emplace_back( pkgPtr);
 
-        if (self->sendingMessageQueue.size() > 1) {
+        if (self->m_sendingMessageQueue.size() > 1) {
             return;
         }
         self->_send();
@@ -113,11 +115,11 @@ void TCPSession::queueSendMessage2C(const std::shared_ptr<AlgoMsg::MessagePkg>& 
 
 void TCPSession::_send() {
 
-    if (sendingMessageQueue.empty()) {
+    if (m_sendingMessageQueue.empty()) {
         return;
     }
 
-    auto& sendPkgPtr = sendingMessageQueue.front();
+    auto& sendPkgPtr = m_sendingMessageQueue.front();
 
     auto messageSeqId = sendPkgPtr->head().msg_seq_id();
 
@@ -153,11 +155,11 @@ void TCPSession::_send() {
                 if (!ec) {
                     TCPSessionManager::getInstance().sendMessagesOffset(sendPkgPtr);
 
-                    self->sendingMessageQueue.pop_front();
+                    self->m_sendingMessageQueue.pop_front();
 
                     SPDLOG_DEBUG("NotifyOK.cmd {},messageid:{},remain:{}", (uint32_t)cmd, messageSeqId, self->sendingMessageQueue.size());
 
-                    if (not self->sendingMessageQueue.empty()) {
+                    if (not self->m_sendingMessageQueue.empty()) {
 
                         asio::post(self->m_strand, [self]() {self->_send(); });
                     }
@@ -166,7 +168,7 @@ void TCPSession::_send() {
                 {
                     SPDLOG_INFO("send Failed.cmd {},messageid:{}", (uint32_t)cmd, messageSeqId);
 
-                    SPDLOG_INFO("socket {} with error:{}", (int)self->m_socketHandle, ec.message());
+                    SPDLOG_INFO("socket {} with error:{}", self->m_socketId, ec.message());
 
                     self->safeDisConnect();
                 }
@@ -183,14 +185,14 @@ void TCPSession::safeDisConnect() {
 
         if (ec) {
 
-            SPDLOG_ERROR("{} Shutdown failed:{} ", (int)m_socketHandle, ec.message());
+            SPDLOG_ERROR("socket {} Shutdown failed:{} ", m_socketId, ec.message());
         }
 
         m_socket.close(ec);
 
         if (ec) {
 
-            SPDLOG_ERROR("{} Close failed:{} ", (int)m_socketHandle, ec.message());
+            SPDLOG_ERROR("socket{} Close failed:{} ", m_socketId, ec.message());
         }
     }
 
@@ -221,13 +223,13 @@ TCPSessionManager::TCPSessionManager():
 {
 	SPDLOG_INFO("TCPSessionManager::TCPSessionManager()");
 
-    m_timer.expires_after(std::chrono::seconds(15));
+    m_timer.expires_after(std::chrono::seconds(3));
 
     m_timer.async_wait([this](boost::system::error_code ec) {
 
         asio::post(m_strand, [this]() {
 
-			printStatInfo();
+            timerJob();
 		});
     });
 }
@@ -236,9 +238,10 @@ TCPSessionManager::~TCPSessionManager() {
     SPDLOG_INFO("TCPSessionManager::~TCPSessionManager()");
 }
 
-std::shared_ptr<TCPSession> TCPSessionManager::createTCPSession(std::shared_ptr<asio::io_context> io_context) {
+std::shared_ptr<TCPSession> TCPSessionManager::createTCPSession(std::shared_ptr<asio::io_context>& io_context) {
 
-    auto session = std::make_shared<TCPSession>(io_context);
+    m_autoId.fetch_add(1);
+    auto session = std::make_shared<TCPSession>(io_context, m_autoId.load());
 
     return session;
 }
@@ -248,105 +251,120 @@ void TCPSessionManager::closeAllSessions() {
     ContextService::getInstance().stopContext("TCPSessionManager");
 }
 
-void TCPSessionManager::printStatInfo() {
-    {
-        std::scoped_lock<std::mutex> lock(m_mutex);
+void TCPSessionManager::timerJob() {
+    
+    pushStockConceptQuotes();
 
-        auto sessionCnt         = TCPSessions.size();
-        auto acctCnt            = acctKey2TCPSessions.size();
-        auto remainMessageCnt   = messageId2Pkg.size();
+    printStatInfo();
 
-        SPDLOG_INFO("[Stat]sessions:{},accts:{},remain messages:{},sent messages:{}"
-            ,sessionCnt
-            , acctCnt
-            , remainMessageCnt
-            , m_sentMessageCnt.load());
-        
-        SPDLOG_INFO("MarketDepth alives:{},Order alives:{},Trade alives:{}"
-            , MarketDepth::totalAliveObjectCount.load()
-            , Order::totalAliveObjectCount.load()
-            , Trade::totalAliveObjectCount.load());
-    }
-
-    m_timer.expires_after(std::chrono::seconds(15));
+    m_timer.expires_after(std::chrono::seconds(3));
 
     m_timer.async_wait([this](boost::system::error_code ec) {
 
         asio::post(m_strand, [this]() {
-            printStatInfo();
+            timerJob();
             });
         });
+}
+
+void TCPSessionManager::printStatInfo() {
+    
+    static auto statTime = agcommon::now();
+
+    if (agcommon::getSecondsDiff(statTime, agcommon::now()) < 15) {
+        return;
+    }
+
+    std::scoped_lock<std::mutex> lock(m_mutex);
+
+    auto sessionCnt = m_tcpSessions.size();
+    auto acctCnt = m_acctKey2TCPSessions.size();
+    auto remainMessageCnt = m_messageId2Pkg.size();
+
+    SPDLOG_INFO("[Stat]sessions:{},accts:{},remain messages:{},sent messages:{}"
+        , sessionCnt
+        , acctCnt
+        , remainMessageCnt
+        , m_sentMessageCnt.load());
+
+    SPDLOG_INFO("MarketDepth alives:{},Order alives:{},Trade alives:{}"
+        , MarketDepth::totalAliveObjectCount.load()
+        , Order::totalAliveObjectCount.load()
+        , Trade::totalAliveObjectCount.load());
+
+    statTime = agcommon::now();
 }
 
 bool TCPSessionManager::isLogin(const AcctKey_t& acctKey) {
 
     std::scoped_lock lock(m_mutex);
 
-    return acctKey2TCPSessions.find(acctKey) != acctKey2TCPSessions.end();
-
+    return m_acctKey2TCPSessions.find(acctKey) != m_acctKey2TCPSessions.end();
 }
-bool TCPSessionManager::login(const AcctKey_t& acctKey,const AlgoMsg::MsgLoginRequest& request, std::shared_ptr<TCPSession> session) {
+
+bool TCPSessionManager::isLogin(const std::shared_ptr<TCPSession>& session) {
 
     std::scoped_lock lock(m_mutex);
 
-    sockect_handel_t sockect_handel = session->m_socketHandle;
+    return not session->m_loginAcctKeys.empty();
+}
 
-    auto [it, inserted] = TCPSessions.try_emplace(sockect_handel, session);
+bool TCPSessionManager::login(const AcctKey_t& acctKey,const AlgoMsg::MsgLoginRequest& request, std::shared_ptr<TCPSession> session) {
 
-    if (not inserted) {
-        SPDLOG_INFO("addConnection already have:{}. login:{},resendmessage:{}", (int)sockect_handel, acctKey, request.resendmessage());
-    }
-    session->loginAcctKeys.insert(acctKey);
-
-    auto [socketMap_it,inserted2] = acctKey2TCPSessions.try_emplace(acctKey,
-        std::map<sockect_handel_t, std::shared_ptr<TCPSession>>{ {sockect_handel, session} });
-
-    if (not inserted2) {
-        socketMap_it->second.insert({ sockect_handel, session });
+    {
+        std::scoped_lock<std::mutex> lock(m_mutex);
+        /*check user pw*/
     }
 
-    if (request.resendmessage()) {
-        reSend(session, acctKey, request);
+    if (addLoginTCPSession(acctKey, session)) {
+        SPDLOG_INFO("acctKey:{} login in session:{},resendmessage:{}", acctKey, session->m_socketId, request.resendmessage());
     }
 
     return true;
 }
 
-bool TCPSessionManager::addTCPSession(std::shared_ptr<TCPSession>& session) {
+bool TCPSessionManager::addLoginTCPSession(const AcctKey_t& acctKey, std::shared_ptr<TCPSession>& session) {
 
     std::scoped_lock<std::mutex> lock(m_mutex);
 
-    auto it = TCPSessions.insert({ session->m_socketHandle, session });
 
-    SPDLOG_INFO("addConnection:{}", (int)session->m_socketHandle);
+    auto it = m_tcpSessions.insert({ session->m_socketId, session });
 
-    return it.second;
+    session->m_loginAcctKeys.insert(acctKey);
+
+    auto [socketMap_it, inserted2] = m_acctKey2TCPSessions.try_emplace(acctKey,SessionMap{ {session->m_socketId, session} });
+
+    if (not inserted2) {
+        socketMap_it->second.insert({ session->m_socketId, session });
+    }
+
+    return true;
 }
 
 bool TCPSessionManager::removeTCPSession(const std::shared_ptr<TCPSession>& session) {
 
     std::scoped_lock<std::mutex> lock(m_mutex);
 
-    auto& loginAcctKeys = session->loginAcctKeys;
+    auto& loginAcctKeys = session->m_loginAcctKeys;
 
-    for (auto& loginAcctKey : loginAcctKeys) {
+    for (const auto& loginAcctKey : loginAcctKeys) {
 
-        if (auto it = acctKey2TCPSessions.find(loginAcctKey); it != acctKey2TCPSessions.end()) {
+        if (auto it = m_acctKey2TCPSessions.find(loginAcctKey); it != m_acctKey2TCPSessions.end()) {
 
 			auto& socketMap = it->second;
-            socketMap.erase(session->m_socketHandle);
+            socketMap.erase(session->m_socketId);
 
             if (socketMap.empty()) {
-				SPDLOG_INFO("acctKey:{} remove socket session:{},no session remain.", loginAcctKey, (int)session->m_socketHandle);
-                acctKey2TCPSessions.erase(loginAcctKey);
+				SPDLOG_INFO("acctKey:{} remove socket session:{},no session remain.", loginAcctKey, session->m_socketId);
+                m_acctKey2TCPSessions.erase(loginAcctKey);
 			}
 		}
     }
-    if (auto it = TCPSessions.find(session->m_socketHandle); it != TCPSessions.end()) {
+    if (auto it = m_tcpSessions.find(session->m_socketId); it != m_tcpSessions.end()) {
 
-        SPDLOG_INFO("remove socket session:{}", (int)session->m_socketHandle);
+        SPDLOG_INFO("remove socket session:{}", session->m_socketId);
 
-        TCPSessions.erase(it);
+        m_tcpSessions.erase(it);
     }
 
     return true;
@@ -393,15 +411,14 @@ void TCPSessionManager::send(const std::shared_ptr<TCPSession>& session
         sendPkgPtr->mutable_clientkey()->set_acct_type(acctKey.acctType);
         sendPkgPtr->mutable_clientkey()->set_acct(acctKey.acct);
         sendPkgPtr->mutable_clientkey()->set_broker(acctKey.broker);
-
         messageBody->SerializeToString(sendPkgPtr->mutable_body());
 
         SPDLOG_DEBUG("sendNotify2C,cmd:{},messageSeqId:{}", (uint32_t)cmd, messageSeqId);
 
         if (shouldCache) {
-            auto containerIt = messageId2Pkg.emplace_hint(messageId2Pkg.end(), messageSeqId, sendPkgPtr);
+            auto containerIt = m_messageId2Pkg.emplace_hint(m_messageId2Pkg.end(), messageSeqId, sendPkgPtr);
 
-            auto& m_it = acct2MessageIter[acctKey];
+            auto& m_it = m_acct2MessageIter[acctKey];
 
             m_it.emplace_hint(m_it.end(), messageSeqId, containerIt);
         }
@@ -414,16 +431,16 @@ void TCPSessionManager::send(const std::shared_ptr<TCPSession>& session
 
             std::scoped_lock<std::mutex> lock(m_mutex);
 
-            if (auto sessions = acctKey2TCPSessions.find(acctKey); sessions != acctKey2TCPSessions.end()) {
+            if (auto sessions = m_acctKey2TCPSessions.find(acctKey); sessions != m_acctKey2TCPSessions.end()) {
 
                 for (auto& [socketHandle,session] : sessions->second) {
 
                     session->queueSendMessage2C(sendPkgPtr);
                 }
             }
-            //else {
-            //    SPDLOG_DEBUG("sendNotify2C,cmd:{},messageSeqId:{},no session found", cmd, messageSeqId);
-            //}
+            else {
+                SPDLOG_ERROR("sendNotify2C,cmd:{},messageSeqId:{},acctKey:{},no session found", (uint32_t)cmd, messageSeqId, acctKey);
+            }
 		}
 
 	});
@@ -438,7 +455,7 @@ void TCPSessionManager::sendMessagesOffset(const std::shared_ptr<AlgoMsg::Messag
         auto& clientKey     = pkgPtr->clientkey();
         auto  acctKey       = AcctKey_t(clientKey.acct_type(), clientKey.acct(), clientKey.broker());
 
-        acctSentAcknMaxMessageId[acctKey] = messageSeqId;     // 存储最近发送成功的 NOTIFY  重登录从 acct2MessageIter 发送 messageSeqId 之后的消息
+        m_acctSentAcknMaxMessageId[acctKey] = messageSeqId;     // 存储最近发送成功的 NOTIFY  重登录从 acct2MessageIter 发送 messageSeqId 之后的消息
 
     });
 }
@@ -450,9 +467,9 @@ void TCPSessionManager::reSend(const std::shared_ptr<TCPSession>& session
 
     m_strand.post([this, session, acctKey, request]() {
 
-        auto& messages_it = acct2MessageIter[acctKey];
+        auto& messages_it = m_acct2MessageIter[acctKey];
 
-        auto maxId = acctSentAcknMaxMessageId[acctKey];
+        auto maxId = m_acctSentAcknMaxMessageId[acctKey];
 
         auto begMessageId_order = request.order_msg_seq_id() > 0 ? request.order_msg_seq_id() : maxId;
 
@@ -484,4 +501,145 @@ void TCPSessionManager::reSend(const std::shared_ptr<TCPSession>& session
             }
         }
     });
+}
+
+std::string TCPSessionManager::addMarketDepthSubscribe(const std::shared_ptr<TCPSession>& session
+    ,const AlgoMsg::MsgMarketDepthSubcribeRequest* req) {
+
+    if (not isLogin(session)) {
+        return "session not login!";
+    }
+
+    std::scoped_lock<std::mutex> lock(m_mutex);
+
+    if (req->all_symbols()) {
+        if (req->is_unsubscribe()) {
+            m_subsribeAllMd.erase(session->m_socketId);
+        }
+        else {
+            m_subsribeAllMd.insert(session->m_socketId);
+        }
+    }
+    else {
+        const auto& symbols = req->symbols();
+        for (const auto& symbol : req->symbols()) {
+            if (req->is_unsubscribe()) {
+                if (auto it = m_subscribeSymbolMd.find(symbol); it != m_subscribeSymbolMd.end()) {
+                    it->second.erase(session->m_socketId);
+                }
+            }
+            else {
+                auto [it,inserted] = m_subscribeSymbolMd.try_emplace(symbol);
+                it->second.insert(session->m_socketId);
+            }
+        }
+    }
+    return "";
+}
+
+std::string TCPSessionManager::addStockConceptQuoteSubscribe(const std::shared_ptr<TCPSession>& session
+    , const AlgoMsg::MsgSubscribeStockConceptQuoteRequest* req) {
+
+    if (not isLogin(session)) {
+        return "session not login!";
+    }
+
+    std::scoped_lock<std::mutex> lock(m_mutex);
+
+    if (req->is_unsubscribe()) {
+        m_subsribeConceptQuote.erase(session->m_socketId);
+    }
+    else {
+        m_subsribeConceptQuote.insert(session->m_socketId);
+    }
+    return "";
+}
+
+void TCPSessionManager::pushMarketDepth(MarketDepth* md) {
+
+    auto cmd = AlgoMsg::MsgAlgoCMD::CMD_PUSH_MarketDepth;
+
+    asio::post(m_strand, [this,cmd,mdPtr = boost::intrusive_ptr(md)]() {
+
+        auto mdPkg = mdPtr->encode2AlgoMessage();
+
+        std::scoped_lock<std::mutex> lock(m_mutex);
+
+        if (m_subscribeSymbolMd.empty() and m_subsribeAllMd.empty()) {
+            return;
+        }
+
+        auto sendPkgPtr = std::make_shared<AlgoMsg::MessagePkg>();
+        sendPkgPtr->mutable_head()->set_msg_cmd(cmd);
+        sendPkgPtr->mutable_head()->set_msg_direction(AlgoMsg::MsgDirection::CS_NTY);
+        sendPkgPtr->mutable_head()->set_msg_seq_id(MessageIdGenerator::getInstance().NewId());
+        mdPkg->SerializeToString(sendPkgPtr->mutable_body());
+
+        for (auto const& socketId : m_subsribeAllMd) {
+            if (auto it = m_tcpSessions.find(socketId); it != m_tcpSessions.end()) {
+                it->second->queueSendMessage2C(sendPkgPtr); 
+            }
+        }
+        if(auto it = m_subscribeSymbolMd.find(mdPtr->symbol); it != m_subscribeSymbolMd.end() ) {
+            for (auto const& socketId : it->second) {
+                if (auto it = m_tcpSessions.find(socketId); it != m_tcpSessions.end()) {
+                    it->second->queueSendMessage2C(sendPkgPtr);
+                }
+            }
+        }
+    });
+}
+
+void TCPSessionManager::pushStockConceptQuotes() {
+
+    if(not agcommon::AshareMarketTime::isInMarketTime()) {
+        return;
+    }
+    auto cmd = AlgoMsg::MsgAlgoCMD::CMD_PUSH_StockConceptQuotes;
+
+    asio::post(m_strand, [this, cmd]() {
+
+        std::scoped_lock<std::mutex> lock(m_mutex);
+
+        if (m_subsribeConceptQuote.empty()) {
+            return;
+        }
+
+        auto mdPkg = ConceptQuote::getInstance().encodeConceptQuotes();
+        if (mdPkg) {
+            auto sendPkgPtr = std::make_shared<AlgoMsg::MessagePkg>();
+            sendPkgPtr->mutable_head()->set_msg_cmd(cmd);
+            sendPkgPtr->mutable_head()->set_msg_direction(AlgoMsg::MsgDirection::CS_NTY);
+            sendPkgPtr->mutable_head()->set_msg_seq_id(MessageIdGenerator::getInstance().NewId());
+            mdPkg->SerializeToString(sendPkgPtr->mutable_body());
+
+            for (auto const& socketId : m_subsribeConceptQuote) {
+                if (auto it = m_tcpSessions.find(socketId); it != m_tcpSessions.end()) {
+                    it->second->queueSendMessage2C(sendPkgPtr);
+                }
+            }
+        }
+    }
+    );
+}
+
+void TCPSessionManager::pushStockConceptInfos(const std::shared_ptr<TCPSession>& session) {
+
+    auto cmd = AlgoMsg::MsgAlgoCMD::CMD_PUSH_StockConceptInfos;
+
+    asio::post(m_strand, [this, session, cmd]() {
+
+        std::scoped_lock<std::mutex> lock(m_mutex);
+
+        auto infoPkg = ConceptQuote::getInstance().encodeConceptInfos();
+
+        auto sendPkgPtr = std::make_shared<AlgoMsg::MessagePkg>();
+        sendPkgPtr->mutable_head()->set_msg_cmd(cmd);
+        sendPkgPtr->mutable_head()->set_msg_direction(AlgoMsg::MsgDirection::CS_NTY);
+        sendPkgPtr->mutable_head()->set_msg_seq_id(MessageIdGenerator::getInstance().NewId());
+        infoPkg->SerializeToString(sendPkgPtr->mutable_body());
+
+        session->queueSendMessage2C(sendPkgPtr);
+    }
+    );
 }

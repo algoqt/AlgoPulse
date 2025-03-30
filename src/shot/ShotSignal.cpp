@@ -3,24 +3,16 @@
 
 using AshareMarketTime = agcommon::AshareMarketTime;
 
-ShotSignal::ShotSignal(const AlgoOrderId_t algoOrderId, MarketDepth* signal_at_md)
+ShotSignal::ShotSignal(const AlgoOrderId_t algoOrderId, const MarketDepth* signal_at_md)
 
     : shotId(agcommon::getTimeInt(signal_at_md->quoteTime) * 1000000 + std::stoull(signal_at_md->symbol.substr(0, 6)))
     , algoOrderId(algoOrderId)
     , symbol(signal_at_md->symbol)
-    , signalTime(signal_at_md->quoteTime)
-    , signal_at_md{ signal_at_md } {
+    , signalTime(signal_at_md->quoteTime) {
 }
 
 
 void ShotSignal::update(const MarketDepth* md, const bool useAvgTradePrice) {
-
-    //if (useAvgTradePrice and AshareMarketTime::getMarketDuration(signal_at_md->quoteTime, md->quoteTime) <= 60) {
-    //    avgBuyPrice = md->volume - signal_at_md->volume > 0 ? (md->amount - signal_at_md->amount) / (md->volume - signal_at_md->volume) : signal_at_md->askPrice1;
-    //}
-    //else if (avgBuyPrice == 0 and md->quoteTime < AshareMarketTime::getClosingCallAuctionBeginTime(md->quoteTime)) {
-    //    avgBuyPrice = md->askPrice1;
-    //}
 
     lastPrice = md->price;
     if (!isClosed && avgBuyPrice > 0) {
@@ -39,7 +31,7 @@ std::string ShotSignal::to_string() const {
 
     return std::format(
         "aid:{}, desc:{}, symbol:{}, preClose:{}, OpenReturn:{}, signalTime:{}, sigArriveChange:{}, "
-        "sigShotAmt:{}, sigShotChange:{}, sigShotDuration:{}, sigArrivePrice:{}, sigShotTr:{}, cnt:{}, "
+        "sigShotAmt:{}, sigShotChange:{}, sigShotDuration:{}, sigArrivePrice:{}, sigShotTr:{},sigConfirmTr:{}, cnt:{}, "
         "buyPrice:{}, avgBuyPrice:{}, closePrice:{}, sigPnlReturn:{}, nextDayOpenPrice:{}, nextDayOpenReturn:{}, "
         "adjFactor:{}, nextDayAdjFactor:{}, avgSellPrice:{}, totalTr:{}",
         algoOrderId,
@@ -54,6 +46,7 @@ std::string ShotSignal::to_string() const {
         formatDuration(sigShotDuration),
         format3(sigArrivePrice),
         format3(sigShotTr),
+        format3(sigConfirmTr),
         cnt,
         format3(buyPrice),
         format3(avgBuyPrice),

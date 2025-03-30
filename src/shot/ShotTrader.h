@@ -84,6 +84,8 @@ private:
 
     uint32_t   nextTradeDate = 0;
 
+    uint32_t   preTradeDate = 0;
+
     using DailyBarMap = std::unordered_map<Symbol_t, std::shared_ptr<DailyBar>>;
 
     DailyBarMap bars{};
@@ -97,4 +99,6 @@ private:
     std::unordered_map<AlgoOrderId_t, std::shared_ptr<ShotTrader>> subTraders;
 
     std::vector<std::pair<std::shared_ptr<AlgoOrder>, std::unordered_set<Symbol_t>>> subAlgoOrders;
+
+    boost::unordered_map<Symbol_t, std::map<QuoteTime_t,MarketDepthKeepAlivePtr>> symbol2quoteTime2md_yesterday;
 };

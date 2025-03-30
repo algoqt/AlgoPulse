@@ -1,6 +1,7 @@
 #include "QuoteFeedInternet.h"
 #include "TCPSession.h"
 #include "MarketDepth.h"
+#include "ConceptQuote.h"
 
 static void requestErrorCallback(const requests::Exception& e)
 {
@@ -32,6 +33,7 @@ void QuoteFeedInternet::stop() {
 
         self->m_orderBookKey2CallBack.clear();
         self->m_symbol2SubscribeCallBack.clear();
+        self->m_subscribeKey2SymbolCallBack.clear();
 
         self->onQuoteFeedFinisheds.clear();
         self->onQuoteFeedStarts.clear();
@@ -78,11 +80,11 @@ void QuoteFeedInternet::unSubscribe(const uint64_t subcribeKey) {
     auto task = [self = shared_from_this(), subcribeKey]() {
         if (auto subPtrIt = self->m_subscribeKey2SymbolCallBack.find(subcribeKey); subPtrIt != self->m_subscribeKey2SymbolCallBack.end()) {
             auto& subPtr = subPtrIt->second;
-            for (auto& symbol : subPtr->symbols) {
-                if (self->m_symbolSubCounts.find(symbol) != self->m_symbolSubCounts.end()) {
-                    if (self->m_symbolSubCounts[symbol] > 0)
-                        self->m_symbolSubCounts[symbol]--;
-                    if (self->m_symbolSubCounts[symbol] == 0) {
+            for (const auto& symbol : subPtr->symbols) {
+                if (auto it = self->m_symbolSubCounts.find(symbol); it != self->m_symbolSubCounts.end()) {
+                    if (it->second > 0)
+                        it->second = it->second - 1;
+                    if (it->second == 0) {
                         SPDLOG_INFO("symbol {} unSubscribe to 0", symbol);
                         self->m_symbolSubCounts.erase(symbol);
                     }
@@ -229,16 +231,14 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
         agcommon::TimeCost delay("[DELAY]", fmt::format("[mds:{}]", newMds->size()) ,false);
     #endif 
 
-    for (auto& md : *newMds) {
+    for (auto md : *newMds) {
         if (md == nullptr) {
             continue;
         }
 
-        auto lastIt = m_symbol2md.find(md->symbol);
+        auto [lastIt,inserted] = m_symbol2md.try_emplace(md->symbol,md);
 
-        if (lastIt == m_symbol2md.end()) {
-
-            m_symbol2md.emplace(md->symbol,md);
+        if (inserted) {
             //SPDLOG_INFO("FirstMD:{}", md->to_string());
             qutoeTime = md->quoteTime;
         }
@@ -261,6 +261,7 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
             }
         }
 
+
         newMdCount++;
 
         if (auto subCallBackMap_it = m_symbol2SubscribeCallBack.find(md->symbol); subCallBackMap_it != m_symbol2SubscribeCallBack.end()) {
@@ -277,8 +278,8 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
             for (auto& [subKey, subMarketDepth] : subCallBackMap_it->second) {
                 if (subMarketDepth->dispatchContextPtr) {
                     acct_set.insert(subMarketDepth->acctKey);
-                    md->retainAlive();
-                    asio::post(*subMarketDepth->dispatchContextPtr, [subMarketDepth, md]() {subMarketDepth->onMarketDepth(md); md->release(); });
+                    asio::post(*subMarketDepth->dispatchContextPtr, [subMarketDepth,md = boost::intrusive_ptr(md)]() {
+                        subMarketDepth->onMarketDepth(md.get());});
                 }
             }
         }
@@ -290,18 +291,19 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
 
         acct_set.clear();
 
+        TCPSessionManager::getInstance().pushMarketDepth(md);
+
+        ConceptQuote::getInstance().onMarketDepth(boost::intrusive_ptr(md));
     }
 
     if (newMdCount > 0) {
         ++m_fetchCount;
-        //SPDLOG_INFO("{}th,NEW MD SIZE:{}", m_fetchCount, newMdCount);
+        SPDLOG_DEBUG("{}th,NEW MD SIZE:{}", m_fetchCount, newMdCount);
     }
 
     #if ENABLE_DELAY_STATS
-        testDelay<QuoteFeedInternet>(delay);
+        statDelay<QuoteFeedInternet>(delay);
     #endif
-
-
 }
 
 void QuoteFeedInternet::requestResponseHandler(int batchSize, requests::Response& resp) {
@@ -374,7 +376,7 @@ MarketDepth* QuoteFeedInternet::parseMarketDepth_tx(const std::string& text) {
         amt = p_v_a[2];
     }
     if (vol > "0")
-        new_md->volume = uint64_t(agcommon::get_int(vol)     * volSize);       //股
+        new_md->volume = uint64_t(agcommon::get_int(vol)      * volSize);       //股
     else
         new_md->volume = uint64_t(agcommon::get_int(data[36]) * volSize);  //股
 

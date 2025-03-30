@@ -31,26 +31,27 @@ enum MsgAlgoVendorId {
 
 // 算法类别
 enum MsgAlgoCategory {
-  Category_ALGO   = 0;
-  Category_SHOT   = 1;
-  Category_SPREAD = 2;
-  Category_T0     = 3;
-  Category_HIT    = 4;
+  MsgAlgoCategory_DEFAULT  = 0;
+  Category_ALGO   = 2;
+  Category_SHOT   = 4;
+  Category_SPREAD = 6;
+  Category_T0     = 8;
+  Category_HIT    = 10;
 }
 
 // 算法策略
 enum MsgAlgoStrategy {
-  NOTHING  = 0;
+  AlgoStrategy_DEFAULT  = 0;
   TWAP     = 1;
-  VWAP     = 2;
-  POV      = 3;
-  T0       = 4;
-  SPREAD   = 5;
-  TWAP_AI  = 10;
-  VWAP_AI  = 11;
-  POV_AI   = 12;
-  SHOT     = 20;
-  HIT      = 21;
+  VWAP     = 3;
+  POV      = 5;
+  T0       = 7;
+  SPREAD   = 9;
+  TWAP_AI  = 11;
+  VWAP_AI  = 13;
+  POV_AI   = 15;
+  SHOT     = 17;
+  HIT      = 19;
 }
 
 // 登录请求
@@ -102,13 +103,22 @@ enum MsgAlgoCMD {
 
   CMD_AlgoOrderQueryRequest      = 104;
   CMD_AlgoOrderQueryResponse     = 105;
-  CMD_AlgoInstanceQueryRequest   = 106;
-  CMD_AlgoInstanceQueryResponse  = 107;
+  CMD_AlgoPerformanceQueryRequest   = 106;
+  CMD_AlgoPerformanceQueryResponse  = 107;
 
   CMD_OrderQueryRequest          = 108;
   CMD_OrderQueryResponse         = 109;
   CMD_TradeQueryRequest          = 110;
   CMD_TradeQueryResponse         = 111;
+
+  CMD_MarketDepthQueryRequest    = 112;
+  CMD_MarketDepthQueryResponse   = 113;
+
+  CMD_SubscribeMarketDepthRequest    = 114;
+  CMD_SubscribeMarketDepthResponse   = 115;
+
+  CMD_SubscribeStockConceptQuoteRequest    = 116;
+  CMD_SubscribeStockConceptQuoteResponse   = 117;
 
   CMD_NOTIFY_AlgoExecutionInfo   = 201;
   CMD_NOTIFY_Order               = 202;
@@ -118,6 +128,11 @@ enum MsgAlgoCMD {
   CMD_NOTIFY_ShotPerformance     = 206;
   CMD_NOTIFY_SpreadPairInfo      = 207;
   CMD_NOTIFY_PairPerformance     = 208;
+
+  CMD_PUSH_MarketDepth         = 300;
+  CMD_PUSH_StockConceptInfos   = 301;
+  CMD_PUSH_StockConceptQuotes  = 302;
+
 }
 
 // 算法操作
@@ -191,32 +206,17 @@ message MsgAlgoInstanceUpdateResponse {
   optional bytes           client_algo_order_id = 7;
 }
 
-// 算法实例查询请求
-message MsgAlgoInstanceQueryRequest {
-  optional uint64          request_id      = 1;
-  optional AcctType        acct_type       = 2;
-  optional bytes           acct            = 3;
-  optional MsgAlgoVendorId vendor_id       = 4;
-  optional uint64          algo_order_id   = 5;
-}
-
-// 算法实例查询响应
-message MsgAlgoInstanceQueryResponse {
-  optional uint64          request_id      = 1;
-  optional int32           error_code      = 2;
-  optional bytes           error_msg       = 3;
-  optional bool            is_last         = 4;
-  repeated MsgAlgoPerformance data_array   = 5;
-}
-
 // 算法订单查询请求
 message MsgAlgoOrderQueryRequest {
   optional uint64          request_id            = 1;
-  optional AcctType        acct_type             = 2;
-  optional bytes           acct                  = 3;
-  optional MsgAlgoVendorId vendor_id             = 4;
-  optional uint64          algo_order_id         = 5;
-  optional bytes           client_algo_order_id  = 6;
+  optional uint64          trade_date            = 2;
+  optional AcctType        acct_type             = 3;
+  optional bytes           acct                  = 4;
+  optional MsgAlgoVendorId vendor_id             = 5;
+  optional uint64          algo_order_id         = 6;
+  optional bytes           client_algo_order_id  = 7;
+  optional uint64          create_date           = 8; // for backtest 
+
 }
 
 // 算法订单查询响应
@@ -231,12 +231,13 @@ message MsgAlgoOrderQueryResponse {
 // 订单查询请求
 message MsgOrderQueryRequest {
   optional uint64          request_id      = 1;
-  optional AcctType        acct_type       = 2;
-  optional bytes           acct            = 3;
-  optional MsgAlgoVendorId vendor_id       = 4;
-  optional uint64          algo_order_id   = 5;
-  optional uint64          order_id_begin  = 6;
-  optional uint64          order_id_end    = 7;
+  optional uint64          trade_date      = 2;
+  optional AcctType        acct_type       = 3;
+  optional bytes           acct            = 4;
+  optional MsgAlgoVendorId vendor_id       = 5;
+  optional uint64          algo_order_id   = 6;
+  optional uint64          order_id_begin  = 7;
+  optional uint64          order_id_end    = 8;
 }
 
 // 订单查询响应
@@ -251,12 +252,13 @@ message MsgOrderQueryResponse {
 // 成交查询请求
 message MsgTradeQueryRequest {
   optional uint64          request_id      = 1;
-  optional AcctType        acct_type       = 2;
-  optional bytes           acct            = 3;
-  optional MsgAlgoVendorId vendor_id       = 4;
-  optional uint64          algo_order_id   = 5;
-  optional uint64          trade_id_begin  = 6;
-  optional uint64          trade_id_end    = 7;
+  optional uint64          trade_date      = 2;
+  optional AcctType        acct_type       = 3;
+  optional bytes           acct            = 4;
+  optional MsgAlgoVendorId vendor_id       = 5;
+  optional uint64          algo_order_id   = 6;
+  optional uint64          trade_id_begin  = 7;
+  optional uint64          trade_id_end    = 8;
 }
 
 // 成交查询响应
@@ -426,6 +428,37 @@ message MsgShotSignalInfo {
   optional bytes           description            = 30;
   optional double          avg_sell_price         = 31;
   optional double          total_tr               = 32;
+  optional double          confirm_tr             = 33;
+  repeated uint64          ShotMdTimes            = 34;
+
+}
+
+// 算法绩效查询请求
+message MsgAlgoPerformanceQueryRequest {
+  optional uint64          request_id      = 1;
+  optional uint64          trade_date      = 2;
+  optional AcctType        acct_type       = 3;
+  optional bytes           acct            = 4;
+  optional MsgAlgoVendorId vendor_id       = 5;
+  optional MsgAlgoCategory algo_category   = 6;     // 算法类别
+  optional uint64          algo_order_id   = 7;
+}
+
+message MsgAlgoResult {
+    oneof performance_type {
+      MsgAlgoPerformance algo_perfs = 1;
+      MsgShotPerformance shot_perfs = 2;
+      MsgPairPerformance pair_perfs = 3;
+    }
+}
+
+// 算法绩效查询响应
+message MsgAlgoPerformanceQueryResponse {
+  optional uint64          request_id      = 1;
+  optional int32           error_code      = 2;
+  optional bytes           error_msg       = 3;
+  optional bool            is_last         = 4;
+  repeated MsgAlgoResult   data_array      = 5;
 }
 
 // 订单信息
@@ -472,6 +505,7 @@ message MsgTradeInfo {
   optional bytes           note_text              = 15;
 }
 
+
 message MsgMarketDepth {
   optional bytes           symbol                 = 1;
   optional double          price                  = 2;
@@ -507,14 +541,78 @@ message MsgMarketDepth {
   optional int32           delta_volume           = 32;
   optional double          delta_amount           = 33;
   optional uint64          quote_time             = 34;
-  optional uint64          subscribe_key          = 35;
+}
+
+message MsgMarketDepthSubcribeRequest {
+  optional uint64          request_id    = 1;
+  repeated bytes           symbols       = 2;
+  optional bool            all_symbols   = 3;
+  optional bool            is_unsubscribe = 4;
+}
+
+message MsgMarketDepthSubcribeResponse {
+  optional uint64          request_id   = 1;
+  optional int32           error_code   = 2;
+  optional bytes           error_msg    = 3;
+  repeated bytes           unaccept_symbols  = 4;
+}
+
+
+message MsgSubscribeStockConceptQuoteRequest {
+  optional uint64          request_id       = 1;
+  optional bool            is_unsubscribe   = 2;
+}
+
+message MsgSubscribeStockConceptQuoteResponse {
+  optional uint64          request_id   = 1;
+  optional int32           error_code   = 2;
+  optional bytes           error_msg    = 3;
+}
+
+message MsgMarketDepthQueryRequest {
+  optional uint64          request_id    = 1;
+  optional bytes           symbol        = 2;
+  optional uint64          start_time    = 3;
+  optional uint64          end_time      = 4;
+}
+
+message MsgMarketDepthQueryResponse {
+  optional uint64          request_id   = 1;
+  optional int32           error_code   = 2;
+  optional bytes           error_msg    = 3;
+  optional bool            is_last      = 4;
+  repeated MsgMarketDepth  md_array     = 5;
+}
+
+message MsgStockConceptInfo {
+  optional bytes  concept_id    = 1;
+  optional bytes  concept_name  = 2;
+  repeated bytes  symbols       = 3;
+}
+
+message MsgStockConceptInfos {
+
+  repeated MsgStockConceptInfo  concept_array       = 1;
+
+}
+
+message MsgStockConceptQuote {
+  optional uint64 quote_time    = 1;
+  optional bytes  concept_id    = 2;
+  optional double return_rate   = 3;
+}
+
+message MsgStockConceptQuotes {
+
+  repeated MsgStockConceptQuote  quote_array       = 1;
+
 }
 
 // 客户端标识
 message clientKey {
-  optional AcctType        acct_type              = 1;
-  optional bytes           acct                   = 2;
-  optional uint32          broker                 = 3;
+  optional AcctType        acct_type    = 1;
+  optional bytes           acct         = 2;
+  optional uint32          broker       = 3;
 }
 
 // 消息头

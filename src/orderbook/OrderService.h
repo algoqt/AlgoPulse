@@ -39,11 +39,10 @@ public:
 		, const OrderId_t& orderId
 		, const agcommon::QuoteMode& quoteMode);
 
-	void onOrderUpdate(const Order* order);
+	void publishOrderUpdate(const Order* order);
 
-	void onTrade(const Trade* trade);
+	void publishTrade(const Trade* trade);
 
-	void testDelay(agcommon::TimeCost& delay);
 
 private:
 

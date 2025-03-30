@@ -16,33 +16,42 @@ public:
 		return instance;
 	}
 
-	void storeMessage(const AlgoMsg::MsgAlgoCMD cmd, const std::shared_ptr<google::protobuf::Message> msg) {
+	void storeMessage(const AlgoMsg::MsgAlgoCMD cmd, const std::shared_ptr<google::protobuf::Message>& msg
+		, std::unique_ptr<AlgoMsg::MessagePkg>&& recvPkgPtr = nullptr) {
 
-		m_runContextPtr->post([cmd,msg,this]() {
+		auto task = [this, cmd, msg, pkg = std::move(recvPkgPtr)]() mutable {
 
 			switch (cmd)
 			{
-				case AlgoMsg::CMD_NOTIFY_ShotPerformance: {
-					auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgShotPerformance> (msg);
-					storeMessage(cast_msg);
-					break;
-				}
+			case AlgoMsg::CMD_AlgoInstanceCreateRequest: {
+				auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgAlgoInstanceCreateRequest>(msg);
+				storeMessage(cast_msg);
+				break;
+			}
 
-				case AlgoMsg::CMD_NOTIFY_ShotSignalInfo: {
-					auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgShotSignalInfo> (msg);
-					storeMessage(cast_msg);
-					break;
-				}
-				case AlgoMsg::CMD_NOTIFY_AlgoExecutionInfo: {
-					auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgAlgoPerformance> (msg);
-					storeMessage(cast_msg);
-					break;
-				}
+			case AlgoMsg::CMD_NOTIFY_ShotPerformance: {
+				auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgShotPerformance>(msg);
+				storeMessage(cast_msg);
+				break;
+			}
 
-				default:
-					break;
-			} 
-		});
+			case AlgoMsg::CMD_NOTIFY_ShotSignalInfo: {
+				auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgShotSignalInfo>(msg);
+				storeMessage(cast_msg);
+				break;
+			}
+			case AlgoMsg::CMD_NOTIFY_AlgoExecutionInfo: {
+				auto cast_msg = std::dynamic_pointer_cast<AlgoMsg::MsgAlgoPerformance>(msg);
+				storeMessage(cast_msg);
+				break;
+			}
+
+			default:
+				break;
+			}
+		};
+		
+		asio::post(*m_runContextPtr,std::move(task));
 	}
 
 	void createTable(sqlite3* db);
@@ -58,10 +67,13 @@ private:
 	sqlite3*			m_db;
 
 	/*std::mutex			m_mutex;*/
+	void storeMessage(const std::shared_ptr<AlgoMsg::MsgAlgoInstanceCreateRequest>& msg);
 
-	void storeMessage(const std::shared_ptr<AlgoMsg::MsgShotSignalInfo> msg);
+	void storeMessage(const std::shared_ptr<AlgoMsg::MsgShotSignalInfo>& msg);
 
-	void storeMessage(const std::shared_ptr<AlgoMsg::MsgShotPerformance> msg);
+	void storeMessage(const std::shared_ptr<AlgoMsg::MsgShotPerformance>& msg);
 
-	void storeMessage(const std::shared_ptr<AlgoMsg::MsgAlgoPerformance> msg);
+	void storeMessage(const std::shared_ptr<AlgoMsg::MsgAlgoPerformance>& msg);
+
+	std::vector<unsigned char>  tmpCache;
 };

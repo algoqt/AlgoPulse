@@ -1,4 +1,5 @@
 #include "LimitedQueue.h"
+#include "ShotSignal.h"
 
 void LimitedQueue::release() {
 
@@ -58,7 +59,7 @@ const double LimitedQueue::getShotChageRate() const {
     }
     double midPrice = _shotQueue.front()->getMidPrice();
     auto& md = _shotQueue.back();
-    double shotChange = midPrice > 0 ? (md->price - midPrice) / midPrice * 100 : 0;
+    double shotChange = midPrice > 0 ? (md->price - midPrice) / midPrice : 0;
     return shotChange;
 }
 
@@ -78,7 +79,10 @@ void LimitedQueue::resetLow(const MarketDepthKeepAlivePtr& newMd) {
     }
 }
 
-bool LimitedQueue::triggerShotMinMax(MarketDepth* _newMd, double rangeRatePercent/* = 2.0*/, double durationConfig /*= 300*/) {
+bool LimitedQueue::shotConfirm(MarketDepth* _newMd
+    , double rangeRatePercent/* = 2.0*/
+    , double durationConfig /*= 300*/
+    , ShotConfirm* sc) {
 
     auto newMd = MarketDepthKeepAlivePtr(_newMd);
     if (lowPriceMd == nullptr) {
@@ -92,7 +96,7 @@ bool LimitedQueue::triggerShotMinMax(MarketDepth* _newMd, double rangeRatePercen
         if (newMd->price <= lowPriceMd->price and newMd->quoteTime > lowPriceMd->quoteTime) {
             lowPriceMd = newMd;
             if (highPriceMd) {
-                highPriceMd = nullptr; // 新低时 更新最高价
+                highPriceMd = nullptr; // 新低时 重置最高价
             }
         }
     }
@@ -102,33 +106,37 @@ bool LimitedQueue::triggerShotMinMax(MarketDepth* _newMd, double rangeRatePercen
     if (rangeRate > rangeRatePercent and highPriceMd == nullptr) {
 
         highPriceMd = newMd;
+        trigVol = newMd->volume - _shotQueue[0]->volume;
     }
 
-    bool isTrig = false;
+    bool confirm = false;
 
     if (highPriceMd and newMd->price > highPriceMd->price and newMd->quoteTime > lowPriceMd->quoteTime) {
 
-        auto duration = agcommon::AshareMarketTime::getMarketDuration(highPriceMd->quoteTime, newMd->quoteTime);
+        sc->confirmDuration = agcommon::AshareMarketTime::getMarketDuration(highPriceMd->quoteTime, newMd->quoteTime);
 
-        SPDLOG_DEBUG("trigger signal:{},{:.3f},{},low:{:.3f},{},high:{:.3f},{},duration {:.3f}", newMd->symbol, rangeRate, agcommon::getDateTimeStr(newMd->quoteTime)
-            , lowPriceMd->price, agcommon::getDateTimeStr(lowPriceMd->quoteTime)
-            , highPriceMd->price, agcommon::getDateTimeStr(highPriceMd->quoteTime), duration);
+        if (sc->confirmDuration > durationConfig) {
 
-        if (duration > durationConfig) {
+            SPDLOG_INFO("trigger signal:{},{:.3f},qt:{},low:{:.3f}@{},high:{:.3f}@{},duration {:.0f}", newMd->symbol
+                , rangeRate, newMd->quoteTime
+                , lowPriceMd->price, lowPriceMd->quoteTime
+                , highPriceMd->price, highPriceMd->quoteTime, sc->confirmDuration);
 
-            SPDLOG_INFO("trigger signal:{},{:.3f},{},low:{:.3f},{},high:{:.3f},{},duration {:.3f}", newMd->symbol, rangeRate, agcommon::getDateTimeStr(newMd->quoteTime)
-                , lowPriceMd->price, agcommon::getDateTimeStr(lowPriceMd->quoteTime)
-                , highPriceMd->price, agcommon::getDateTimeStr(highPriceMd->quoteTime), duration);
-
-            isTrig = true;
+            confirm = true;
             /* restart watching */
-            lowPriceMd = nullptr;
+            sc->lowMdPtr  = lowPriceMd;
+            sc->highMdPtr = highPriceMd;
+            sc->confirmMd = newMd;
+            sc->shotVol   = trigVol;
+
+            lowPriceMd  = nullptr;
             highPriceMd = nullptr;
         }
         else {
             highPriceMd = newMd;
+            trigVol     = newMd->volume - _shotQueue[0]->volume;
         }
     }
 
-    return isTrig;
+    return confirm;
 }

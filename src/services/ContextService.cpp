@@ -2,11 +2,11 @@
 #include "ContextService.h"
 #include <spdlog/spdlog.h>
 
-AsioContextPtr ContextService::createContext(const std::string& applicationKey, int numOfThread /*= 1*/) {
+AsioContextPtr ContextService::createContext(const std::string& contextKeyName, int numOfThread /*= 1*/) {
 
 	std::scoped_lock lock(m_mutex);
 
-	auto it = appKey2contextPtr.find(applicationKey);
+	auto it = appKey2contextPtr.find(contextKeyName);
 	if (it != appKey2contextPtr.end()) {
 		return it->second;
 	}
@@ -14,35 +14,35 @@ AsioContextPtr ContextService::createContext(const std::string& applicationKey, 
 	auto contextPtr = std::make_shared<asio::io_context>();
 	auto workGuard  = asio::make_work_guard(contextPtr->get_executor());
 
-	appKey2contextPtr.insert({ applicationKey,contextPtr });
-	appKey2workGuard.insert({ applicationKey, std::move(workGuard) });
+	appKey2contextPtr.insert({ contextKeyName,contextPtr });
+	appKey2workGuard.insert( { contextKeyName, std::move(workGuard) });
 
 	for (int i = 0; i < numOfThread; i++) {
-		m_threads.push_back(std::thread([this, applicationKey, numOfThread,i,contextPtr]()
+		m_threads.push_back(std::thread([this, contextKeyName, numOfThread,i,contextPtr]()
 			{
-				SPDLOG_INFO("create aiso context[{}] run in {} threads ,this is {}th thread", applicationKey, numOfThread, i + 1);
+				SPDLOG_INFO("create aiso context[{}] run in {} threads ,this is {}th thread", contextKeyName, numOfThread, i + 1);
 				contextPtr->run();
 			})
 		);
 	}
-	if (applicationKey.starts_with("worker")) {
+	if (contextKeyName.starts_with("worker")) {
 		m_workerContexts.push_back(contextPtr);
 	}
 	return contextPtr;
 }
 
-void ContextService::stopContext(const std::string& applicationKey) {
+void ContextService::stopContext(const std::string& contextKeyName) {
 
 	std::scoped_lock lock(m_mutex)
 		;
-	auto it = appKey2workGuard.find(applicationKey);
+	auto it = appKey2workGuard.find(contextKeyName);
 	if (it != appKey2workGuard.end()) {
 		auto& wg = it->second;
 		wg.reset();
 		appKey2workGuard.erase(it);
 	}
 
-	auto cit = appKey2contextPtr.find(applicationKey);
+	auto cit = appKey2contextPtr.find(contextKeyName);
 	if (cit != appKey2contextPtr.end()) {
 		auto& contextPtr = cit->second;
 		contextPtr->stop();

@@ -3,8 +3,27 @@
 #include "typedefs.h"
 #include <highfive/highfive.hpp>
 
+// 1: 股票, 2 : 基金, 3 : 指数, 4 : 期货, 5 : 期权, 8：可转债， 10 : 虚拟合约
+
 namespace h5data {
 
+    class SecurityType {
+    public:
+        static const int STOCK = 1;
+        static const int FUND = 2;
+        static const int INDEX = 3;
+        static const int FUTURE = 4;
+        static const int OPTION = 5;
+        static const int CONVERTBOND = 8;
+        static const int VIRTUALCONTRACT = 10;
+    };
+    class IndexTag {
+    public:
+        static const int HS300 = 1;
+        static const int ZZ500 = 2;
+        static const int ZZ1000 = 4;
+
+    };
     struct TradeCalendar {
 
         int32_t date = 0;
@@ -90,7 +109,7 @@ namespace h5data {
         int32_t trade_date;  // 交易日期
         char    symbol[12];     // 股票代码 (11个字符 + 1个终止符)
         int32_t sec_level;   // 股票级别
-        int32_t sec_type;    // 证券类型     int32_t sec_type;    1: 股票, 2: 基金, 3: 指数, 4: 期货, 5: 期权, 8：可转债， 10: 虚拟合约
+        int32_t sec_type;    // 证券类型     int32_t sec_type;  SecurityType
         char    exchange[5];    // 交易所 (4个字符 + 1个终止符)
         char    sec_id[7];      // 交易所证券代码 (6个字符 + 1个终止符)
         char    sec_name[64];   // 证券名称 (32个字符 + 1个终止符)
