@@ -9,19 +9,19 @@ namespace h5data {
 
     class SecurityType {
     public:
-        static const int STOCK = 1;
-        static const int FUND = 2;
-        static const int INDEX = 3;
-        static const int FUTURE = 4;
-        static const int OPTION = 5;
-        static const int CONVERTBOND = 8;
-        static const int VIRTUALCONTRACT = 10;
+        inline static const int STOCK = 1;
+        inline static const int FUND = 2;
+        inline static const int INDEX = 3;
+        inline static const int FUTURE = 4;
+        inline static const int OPTION = 5;
+        inline static const int CONVERTBOND = 8;
+        inline static const int VIRTUALCONTRACT = 10;
     };
     class IndexTag {
     public:
-        static const int HS300 = 1;
-        static const int ZZ500 = 2;
-        static const int ZZ1000 = 4;
+        inline static const int HS300 = 1;
+        inline static const int ZZ500 = 2;
+        inline static const int ZZ1000 = 4;
 
     };
     struct TradeCalendar {

@@ -33,7 +33,7 @@ class Task_onUpdateAlgoInstance :public Task {
 
 			resp->set_error_code((int32_t)AlgoErrorCode::ALGO_ERROR);
 			resp->set_error_msg("parse AlgoMsg::MsgAlgoInstanceUpdateRequest failed");
-			TCPSessionManager::getInstance().sendResp2C(session, AlgoMsg::MsgAlgoCMD::CMD_AlgoInstanceUpdateResponse, resp);
+			TCPSessionManager::getInstance().sendResp2C(session, cmd_response, resp);
 			return;
 		}
 
@@ -115,7 +115,7 @@ class Task_onUpdateAlgoInstance :public Task {
 			//resp.PrintDebugString();
 		}
 
-		TCPSessionManager::getInstance().sendResp2C(session, AlgoMsg::MsgAlgoCMD::CMD_AlgoInstanceUpdateResponse, resp);
+		TCPSessionManager::getInstance().sendResp2C(session, cmd_response, resp);
 		StorageService::getInstance().storeMessage(cmd, req, std::move(recvPkgPtr));
 
 	}
