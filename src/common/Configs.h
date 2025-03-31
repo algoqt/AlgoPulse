@@ -41,7 +41,6 @@ namespace agcommon {
             if (auto it = m_config.find(section); it != m_config.end()) {
                 auto& dict = it->second;
                 if (section == "DATACONFIG") {
-                    SPDLOG_INFO("{}", section);
                     return dict.contains(key) ? m_h5FileDir + dict.at(key) : defaultValue;
                 }
                 return dict.contains(key) ? dict.at(key) : defaultValue;

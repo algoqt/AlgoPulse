@@ -404,7 +404,7 @@ bool OrderBookSim::_cancelOrderWithOrderId(const OrderId_t& orderId){
             return false;
         }
 
-        SPDLOG_INFO("[OrderCancel][{}]symbol:{},qty:{},filled:{}",order->symbol, order->orderId, order->orderQty, order->filledQty);
+        SPDLOG_INFO("[OrderCancel][{}]symbol:{},qty:{},filled:{}", order->orderId, order->symbol, order->orderQty, order->filledQty);
 
         if (not agcommon::OrderStatus::isFinalStatus(order->status)) {
             Order preOrder = *order;

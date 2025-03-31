@@ -124,10 +124,10 @@ std::string AlgoTrader::preStartCheck() {
             }
 
             if (startTime < agcommon::addDuration(now, -3)) {
-                startTime = now;
                 SPDLOG_WARN("[aId:{}]startTime:{} adjust to now: {}", algoOrderPtr->algoOrderId
                     , agcommon::getDateTimeInt(startTime)
                     , agcommon::getDateTimeInt(now));
+                startTime = now;
             }
         }
 
@@ -428,12 +428,12 @@ void AlgoTrader::onOrderUpdate(const Order* order) {
             , algoPerf.qtyTarget - algoPerf.qty
             , order->to_string_simple());
 
-        if (algoPerf.qty - algoPerf.qtyFilled > 0) {
-            auto orderIds = algoPerf.getAllPendingOrderIds();
-            for (const auto orderId : orderIds) {
-                SPDLOG_INFO("[aId:{}][cancelAll]pendingOrderId:{}", algoOrderId, orderId);
-            }
-        }
+        //if (algoPerf.qty - algoPerf.qtyFilled > 0) {
+        //    auto orderIds = algoPerf.getAllPendingOrderIds();
+        //    for (const auto orderId : orderIds) {
+        //        SPDLOG_DEBUG("[aId:{}][cancelAll]pendingOrderId:{}", algoOrderId, orderId);
+        //    }
+        //}
     }
     else {
         if (order->isFinalStatus()) {
@@ -550,8 +550,8 @@ asio::awaitable<void> AlgoTrader::schedual() {
             cumQtyOfSlicers = VWAP::allocateCumulativeQty(algoOrderPtr->qtyTarget, numOfSlicers, ssinfoPtr, startTime, endTime);
         }
 
-        SPDLOG_INFO("[aId:{}]{},startTime:{},endTime:{},algoDuration:{},numOfSlicer:{}",algoOrderId,algoOrderPtr->symbol,
-            agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime), algoDuration, numOfSlicers);
+        SPDLOG_INFO("[aId:{}]{},startTime:{},endTime:{},randDuration:{:.3f},algoDuration:{:.3f},numOfSlicer:{}",algoOrderId,algoOrderPtr->symbol,
+            agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime), rand_d, algoDuration, numOfSlicers);
 
         double remainTime = algoDuration - durationPerSlicer * (cumQtyOfSlicers.size() - 1);
         double bias = 0.05;
@@ -919,7 +919,7 @@ void AlgoTrader::slicePolicyOnSignal(const PolicyAction& action, const double pr
 
 double AlgoTrader::getPriceCover4Take(int qty, double coverRate) {
 
-    coverRate = coverRate != 0 ? coverRate : AlgoConstants::DefaultCoverRate;
+    coverRate = coverRate != 0 ? coverRate : AlgoConstants::Default_CoverRate;
 
     int volsum = 0;
     double price = 0.0;
@@ -964,10 +964,10 @@ int32_t AlgoTrader::getQtyShinkImpact(int32_t qty2take) {
     int32_t maxMarketImpactVol = 0;
 
     if (algoPerf.isBuy) {
-        maxMarketImpactVol = (int32_t)((m_md->askVol1 + m_md->askVol2) * AlgoConstants::MAXShotImpactVolRate);
+        maxMarketImpactVol = (int32_t)((m_md->askVol1 + m_md->askVol2) * AlgoConstants::Max_Take_Impact_VolRate);
     }
     else {
-        maxMarketImpactVol = (int32_t)((m_md->bidVol1 + m_md->bidVol2) * AlgoConstants::MAXShotImpactVolRate);
+        maxMarketImpactVol = (int32_t)((m_md->bidVol1 + m_md->bidVol2) * AlgoConstants::Max_Take_Impact_VolRate);
     }
 
     if (qty2take - maxMarketImpactVol >= ssinfoPtr->getOrderInitQty()) {

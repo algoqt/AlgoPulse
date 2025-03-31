@@ -68,7 +68,7 @@ add_custom_command(
     COMMENT "Generating .pb.cc and .pb.h files from AlgoMessages.proto"
 )
 
-add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES} "services/Task.cpp" "services/Task_OnSubscribeMarketDepth.h" "services/Task_Register.h" "services/Task_OnLogin.h" "services/Task_onStartAlgoInstance.cpp" "services/Task_onUpdateAlgoInstance.h")
+add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES} "services/Task.cpp" "services/Task_OnSubscribeMarketDepth.h" "services/Task_Register.h" "services/Task_OnLogin.h" "services/Task_onStartAlgoInstance.cpp" "services/Task_onUpdateAlgoInstance.h" "algo/AlgoConstants.cpp")
 add_subdirs_to_target_include_directories(algoPulse ${PROJECT_SOURCE_DIR})
 target_link_libraries(algoPulse Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
 
