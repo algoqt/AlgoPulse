@@ -17,13 +17,14 @@ namespace h5data {
         inline static const int CONVERTBOND = 8;
         inline static const int VIRTUALCONTRACT = 10;
     };
+    
     class IndexTag {
     public:
         inline static const int HS300 = 1;
         inline static const int ZZ500 = 2;
         inline static const int ZZ1000 = 4;
-
     };
+
     struct TradeCalendar {
 
         int32_t date = 0;

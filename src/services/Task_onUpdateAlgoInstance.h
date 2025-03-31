@@ -116,8 +116,8 @@ class Task_onUpdateAlgoInstance :public Task {
 		}
 
 		TCPSessionManager::getInstance().sendResp2C(session, cmd_response, resp);
-		StorageService::getInstance().storeMessage(cmd, req, std::move(recvPkgPtr));
 
+		StorageService::getInstance().storeMessage(cmd, req, std::move(recvPkgPtr));
 	}
 
 };

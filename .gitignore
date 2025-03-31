@@ -42,3 +42,4 @@ out/*
 /*/gmcache/*
 .vs/*
 ./enc_temp_folder/*
+.vscode/*
