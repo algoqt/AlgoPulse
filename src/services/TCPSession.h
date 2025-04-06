@@ -117,7 +117,7 @@ public:
 
     std::string addStockConceptQuoteSubscribe(const std::shared_ptr<TCPSession>& session,const AlgoMsg::MsgSubscribeStockConceptQuoteRequest* req);
 
-    void pushMarketDepth(MarketDepth* md);
+    void pushMarketDepth(const MarketDepth* md);
 
     void pushStockConceptQuotes();
 

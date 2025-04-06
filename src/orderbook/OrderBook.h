@@ -39,7 +39,7 @@ class OrderBook: public std::enable_shared_from_this<OrderBook> {
 
 public:
     OrderBook(const OrderBookRequest& req) :m_request(req), m_running(false) {}; // , m_strand(*req.runContextPtr)
-    ~OrderBook() = default;
+    virtual ~OrderBook() = default;
     OrderBook(const OrderBook&) = delete;
     OrderBook(OrderBook&&)      = delete;
     OrderBook& operator = (const OrderBook&) = delete;
@@ -55,7 +55,7 @@ public:
 
     inline bool isBackTest() const { return m_request.quoteMode == agcommon::QuoteMode::REPLAY; }
 
-    virtual void onMarketDepth(MarketDepth* const md) = 0;
+    virtual void onMarketDepth(const MarketDepth*) = 0;
 
     virtual bool placeOrder(const Order* order) = 0;
 

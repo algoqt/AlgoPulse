@@ -15,7 +15,7 @@ void LimitedQueue::release() {
     highPriceMd = nullptr;
 }
 
-void LimitedQueue::append(MarketDepth* newItem) {
+void LimitedQueue::append(const MarketDepth* newItem) {
 
     auto item = MarketDepthKeepAlivePtr(newItem);
     shotPeriodFlow += item->flow;
@@ -79,7 +79,7 @@ void LimitedQueue::resetLow(const MarketDepthKeepAlivePtr& newMd) {
     }
 }
 
-bool LimitedQueue::shotConfirm(MarketDepth* _newMd
+bool LimitedQueue::shotConfirm(const MarketDepth* _newMd
     , double rangeRatePercent/* = 2.0*/
     , double durationConfig /*= 300*/
     , ShotConfirm* sc) {
@@ -117,7 +117,7 @@ bool LimitedQueue::shotConfirm(MarketDepth* _newMd
 
         if (sc->confirmDuration > durationConfig) {
 
-            SPDLOG_INFO("trigger signal:{},{:.3f},qt:{},low:{:.3f}@{},high:{:.3f}@{},duration {:.0f}", newMd->symbol
+            SPDLOG_INFO("trigger signal:{},{:.3f},qt:{},low:{:.3f}@{},high:{:.3f}@{},duration {:.0f}", newMd->symbol()
                 , rangeRate, newMd->quoteTime
                 , lowPriceMd->price, lowPriceMd->quoteTime
                 , highPriceMd->price, highPriceMd->quoteTime, sc->confirmDuration);

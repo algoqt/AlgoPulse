@@ -21,7 +21,7 @@ public:
 
     void release();
 
-    void append(MarketDepth* newItem);
+    void append(const MarketDepth* newItem);
 
     inline std::size_t size() const {   return _shotQueue.size();    }
 
@@ -29,7 +29,7 @@ public:
 
     void resetLow(const MarketDepthKeepAlivePtr& newMd);
 
-    bool shotConfirm(MarketDepth* _newMd, double rangeRatePercent = 2.0, double durationConfig = 300, ShotConfirm* sc = nullptr);
+    bool shotConfirm(const MarketDepth* _newMd, double rangeRatePercent = 2.0, double durationConfig = 300, ShotConfirm* sc = nullptr);
 
     inline std::pair<double, double> getShotAmount() const {
 

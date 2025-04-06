@@ -2,10 +2,9 @@
 
 #include <iostream>
 #include <vector>
-#include <cmath>
-#include <numeric>
 #include "typedefs.h"
 #include "ContextService.h"
+#include "EnableSelfHelper.h"
 
 class AlgoOrder;
 class SecurityStaticInfo;
@@ -49,7 +48,7 @@ class AlgoPerformance;
 typedef std::function<void(const AlgoPerformance& algoPerf)> OnAlgoPerformanceUpdate;
 
 
-class Trader : public std::enable_shared_from_this<Trader>,boost::noncopyable {
+class Trader : public EnableSelfHelper<Trader>,boost::noncopyable {
 
 public:
 
@@ -59,6 +58,7 @@ public:
             contextPtr = ContextService::getInstance().getRandomWorkerContext();
         }
     }
+    virtual ~Trader() = default;
 
     virtual std::shared_ptr<AlgoOrder>  getAlgoOrder() const = 0;
 
@@ -78,7 +78,7 @@ public:
 
     virtual void onMarketDepth(const MarketDepth* newMd) {};
 
-    virtual void onMarketDepth(MarketDepth* newMd) {};
+    //virtual void onMarketDepth(MarketDepth* newMd) {};
 
     virtual void onOrderUpdate(const Order* order) {};
 
@@ -96,13 +96,6 @@ public:
 
     std::shared_ptr<asio::io_context> contextPtr;
 
-    std::atomic<bool>  hasStarted;
-
-    template<class T>  
-    requires std::is_base_of_v<Trader, T>
-    std::shared_ptr<T> keep_alive_this() {
-
-        return std::static_pointer_cast<T>(shared_from_this());
-    }
+    std::atomic<bool>                 hasStarted;
 
 };

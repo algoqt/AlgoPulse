@@ -5,9 +5,9 @@ using AshareMarketTime = agcommon::AshareMarketTime;
 
 ShotSignal::ShotSignal(const AlgoOrderId_t algoOrderId, const MarketDepth* signal_at_md)
 
-    : shotId(agcommon::getTimeInt(signal_at_md->quoteTime) * 1000000 + std::stoull(signal_at_md->symbol.substr(0, 6)))
+    : shotId(agcommon::getTimeInt(signal_at_md->quoteTime) * 1000000 + signal_at_md->_symbol)
     , algoOrderId(algoOrderId)
-    , symbol(signal_at_md->symbol)
+    , symbol(signal_at_md->symbol())
     , signalTime(signal_at_md->quoteTime) {
 }
 

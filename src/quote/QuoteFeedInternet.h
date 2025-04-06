@@ -6,7 +6,7 @@
 #include <../third_party/requests/AsyncRequest.hpp>
 #include <../third_party/requests/Url.hpp>
 #include "MemoryContainer.h"
-
+#include "MappedFileManager.h"
 /*
 * fecth marketDepth from tx :http://qt.gtimg.cn
 */
@@ -58,13 +58,11 @@ private:
 
     void onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>> newMds);
 
+    std::shared_ptr<MappedFileWriter<MarketDepth>> m_mdWriter{nullptr};
+
 public:
 
     static MarketDepth* parseMarketDepth_tx(const std::string& text);
 
-    std::shared_ptr<QuoteFeedInternet> shared_from_this() {
-
-        return std::static_pointer_cast<QuoteFeedInternet>(QuoteFeed::shared_from_this());
-    }
 };
 

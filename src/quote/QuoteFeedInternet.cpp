@@ -8,11 +8,12 @@ static void requestErrorCallback(const requests::Exception& e)
     SPDLOG_ERROR(e.what());
 }
 
-QuoteFeedInternet::QuoteFeedInternet(const QuoteFeedRequest& req) 
+QuoteFeedInternet::QuoteFeedInternet(const QuoteFeedRequest& req)
     : m_request(req)
     , QuoteFeed(req.dispatchContextPtr)
     , m_symbolSubCounts{}
-    , m_keepRuning(false){};
+    , m_keepRuning(false), m_mdWriter{nullptr} {
+};
 
 
 void QuoteFeedInternet::stop() {
@@ -22,7 +23,7 @@ void QuoteFeedInternet::stop() {
         m_keepRuning = false;
     }
 
-    auto self = shared_from_this();
+    auto self = keep_alive_this<QuoteFeedInternet>();
 
     asio::post(m_strand, [self]() {
 
@@ -55,7 +56,7 @@ SubscribeKey_t QuoteFeedInternet::subscribe(std::shared_ptr<SubMarketDepth_t> su
     assert(subPtr->dispatchContextPtr != nullptr);
     assert(subPtr->subscribeKey > 0);
 
-    auto self = shared_from_this();
+    auto self = keep_alive_this<QuoteFeedInternet>();
 
     auto task = [self, subPtr]() {
         auto [it, isinserted] = self->m_subscribeKey2SymbolCallBack.insert({ subPtr->subscribeKey,subPtr });
@@ -77,7 +78,7 @@ void QuoteFeedInternet::unSubscribe(const uint64_t subcribeKey) {
 
     assert(subcribeKey > 0);
 
-    auto task = [self = shared_from_this(), subcribeKey]() {
+    auto task = [self = keep_alive_this<QuoteFeedInternet>(), subcribeKey]() {
         if (auto subPtrIt = self->m_subscribeKey2SymbolCallBack.find(subcribeKey); subPtrIt != self->m_subscribeKey2SymbolCallBack.end()) {
             auto& subPtr = subPtrIt->second;
             for (const auto& symbol : subPtr->symbols) {
@@ -103,7 +104,7 @@ void QuoteFeedInternet::run() {
     if (not m_keepRuning) {
         SPDLOG_INFO("QuoteFeedInternet launch....");
 
-        asio::co_spawn(*m_contextPtr, co_run(), [self = shared_from_this()](std::exception_ptr ex) {
+        asio::co_spawn(*m_contextPtr, co_run(), [self = keep_alive_this<QuoteFeedInternet>()](std::exception_ptr ex) {
             if (!ex) {
                 SPDLOG_INFO("[QuoteFeedInternet]co_spawn finished");
                 self->stop();
@@ -126,6 +127,10 @@ void QuoteFeedInternet::run() {
 asio::awaitable<void> QuoteFeedInternet::co_run() {
 
     if (m_keepRuning) co_return;
+
+    auto date = agcommon::getDateInt();
+
+    m_mdWriter = MappedFileManager<MarketDepth>::createWriter(std::format("md_{}.bin", date));
 
     SPDLOG_INFO(" QuoteFeedInternet start ");
 
@@ -157,7 +162,7 @@ asio::awaitable<void> QuoteFeedInternet::co_run() {
 
         auto i = 1;
         
-        asio::co_spawn(m_strand, [self = shared_from_this(), &params, &url, &i, &asyncRequest]()->asio::awaitable<void> {
+        asio::co_spawn(m_strand, [self = keep_alive_this<QuoteFeedInternet>(), &params, &url, &i, &asyncRequest]()->asio::awaitable<void> {
 
             self->genSymbolBatchs2Fetch();
 
@@ -236,7 +241,7 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
             continue;
         }
 
-        auto [lastIt,inserted] = m_symbol2md.try_emplace(md->symbol,md);
+        auto [lastIt,inserted] = m_symbol2md.try_emplace(md->symbol(), md);
 
         if (inserted) {
             //SPDLOG_INFO("FirstMD:{}", md->to_string());
@@ -264,7 +269,7 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
 
         newMdCount++;
 
-        if (auto subCallBackMap_it = m_symbol2SubscribeCallBack.find(md->symbol); subCallBackMap_it != m_symbol2SubscribeCallBack.end()) {
+        if (auto subCallBackMap_it = m_symbol2SubscribeCallBack.find(md->symbol()); subCallBackMap_it != m_symbol2SubscribeCallBack.end()) {
 
             for (auto& [orderBookKey, onPair] : m_orderBookKey2CallBack) {
 
@@ -293,7 +298,11 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
 
         TCPSessionManager::getInstance().pushMarketDepth(md);
 
-        ConceptQuote::getInstance().onMarketDepth(boost::intrusive_ptr(md));
+        ConceptQuote::getInstance().onMarketDepth(md);
+
+        if (m_mdWriter) {
+            m_mdWriter->appendMarketDepth(md);
+        }
     }
 
     if (newMdCount > 0) {
@@ -321,13 +330,13 @@ void QuoteFeedInternet::requestResponseHandler(int batchSize, requests::Response
         }
         auto md = QuoteFeedInternet::parseMarketDepth_tx(mdstr);
         SPDLOG_DEBUG(md->to_string());
-        if (md->symbol.empty()) {
+        if (md->symbol().empty()) {
             md->release();
             continue;
         }
         newMds->push_back(md);
     }
-    asio::dispatch(m_strand, [self = shared_from_this(), newMds]() {
+    asio::dispatch(m_strand, [self = keep_alive_this<QuoteFeedInternet>(), newMds]() {
         self->onMarketDepth(newMds);
         });
 }
@@ -353,7 +362,7 @@ MarketDepth* QuoteFeedInternet::parseMarketDepth_tx(const std::string& text) {
     MarketDepth* new_md = MarketDepth::create(symbol, quoteTime);
 
     //new_md->name = data[1];
-    int volSize = new_md->symbol.starts_with("68") ? 1 : 100;
+    int volSize = new_md->symbol().starts_with("68") ? 1 : 100;
 
     new_md->price    = agcommon::get_double(data[3]);
     new_md->preClose = agcommon::get_double(data[4]);

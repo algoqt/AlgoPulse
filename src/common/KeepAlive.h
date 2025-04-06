@@ -31,25 +31,15 @@ struct JemallocAllocator {
 
 
 template<typename T>
-class KeepAlivePool {
+class KeepAliveObject {
 
 public:
-    std::atomic<uint32_t>  m_refcount{ 0 };
 
-    inline uint32_t retainAlive() {
+    template<typename... TArgs>
+    inline static boost::intrusive_ptr<T> make_intrusive(TArgs&&... mArgs)
+    {
 
-        return m_refcount.fetch_add(1) + 1;
-    }
-
-    inline void release() {
-        if (m_refcount == 0)
-            return;
-
-        auto before_sub = m_refcount.fetch_sub(1);
-
-        if (before_sub == 1) {
-            destroy((T*)this);
-        }
+        return boost::intrusive_ptr<T>(create(mArgs...), false);
     }
 
     template<typename... TArgs>
@@ -66,21 +56,48 @@ public:
         return ptr;
     }
 
-    friend void intrusive_ptr_add_ref(T* obj) {
+    inline uint32_t retainAlive() const{
+
+        return m_refcount.fetch_add(1) + 1;
+    }
+
+    inline void release() const{
+        if (m_refcount == 0)
+            return;
+
+        auto before_sub = m_refcount.fetch_sub(1);
+
+        if (before_sub == 1) {
+            destroy((T*)this);
+        }
+    }
+    inline uint32_t getRefcount() const {
+        return m_refcount.load();
+    }
+    friend void intrusive_ptr_add_ref(T* obj){
         obj->retainAlive();
     }
 
-    friend void intrusive_ptr_release(T* obj) {
+    friend void intrusive_ptr_release(T* obj){
         if (obj) {
             obj->release();
         }
     }
+    friend void intrusive_ptr_add_ref(const T* obj) {
+        obj->retainAlive();
+    }
 
+    friend void intrusive_ptr_release(const T* obj) {
+        if (obj) {
+            obj->release();
+        }
+    }
 public:
 
     inline static std::atomic<uint64_t> totalAliveObjectCount = 0; 
 
 private:
+    mutable std::atomic<uint32_t>  m_refcount{ 0 };
 
     inline static void destroy(T* mObj)
     {
@@ -96,22 +113,4 @@ private:
 #endif
     }
 
-    struct SharedDeleter
-    {
-        SharedDeleter() {}
-        inline void operator()(T* p) const
-        {
-            p->release();
-        }
-    };
-    inline static SharedDeleter  m_Deleter{};
-
-public:
-
-    template<typename... TArgs>
-    inline static boost::intrusive_ptr<T> make_intrusive(TArgs&&... mArgs)
-    {
-
-        return boost::intrusive_ptr<T>(create(mArgs...),false);
-    }
 };

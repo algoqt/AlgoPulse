@@ -3,58 +3,47 @@
 
 namespace AlgoConstants {
     
+    template <typename T>
+    void logVar(const std::string& name, const T& value) {
+        SPDLOG_INFO("AlgoConstants::{}={}", name, value);
+    }
+
+    inline void logVar(const std::string& name, const double& value) {
+        SPDLOG_INFO("AlgoConstants::{}={:.1f}", name, value);
+    }
+
+    #define INIT_VAR(var_name) \
+        AlgoConstants::var_name = config.getConfigOrDefault("Category_ALGO", #var_name, AlgoConstants::var_name); \
+        logVar(#var_name, AlgoConstants::var_name)
 
     int init() {
 
         auto& config = agcommon::Configs::getConfigs();
 
-        AlgoConstants::Max_Take_Impact_VolRate = config.getConfigOrDefault("Category_ALGO","Max_Take_Impact_VolRate", 0.5);
-        AlgoConstants::Default_CoverRate       = config.getConfigOrDefault("Category_ALGO","Default_CoverRate", 0.25);
+        INIT_VAR(Max_Take_Impact_VolRate);
+        INIT_VAR(Default_Take_Confident_CoverRate);
 
-        AlgoConstants::Allow_Make_Condition_OrderCnt = config.getConfigOrDefault("Category_ALGO"
-            , "Allow_Make_Condition_OrderCnt"
-            , 10);
+        INIT_VAR(Allow_Make_Condition_OrderCnt);
+        INIT_VAR(Allow_Make_Threshold_CancelRate);
+        INIT_VAR(Allow_Make_Threshold_FilledRate);
 
-        AlgoConstants::Allow_Make_Threshold_CancelRate = config.getConfigOrDefault("Category_ALGO"
-            , "Allow_Make_Threshold_CancelRate"
-            , 40.0);
+        INIT_VAR(Maker_Price_Threshold_FilledRate);
 
-        AlgoConstants::Allow_Make_Threshold_FilledRate = config.getConfigOrDefault("Category_ALGO"
-            , "Allow_Make_Threshold_FilledRate"
-            , 60.0);
+        INIT_VAR(Allow_Make_Threshold_CancelRate_LowPrice);
+        INIT_VAR(Allow_Make_Threshold_FilledRate_LowPrice);
 
-        AlgoConstants::Allow_Make_Threshold_CancelRate_LowPrice = config.getConfigOrDefault("Category_ALGO"
-            , "Allow_Make_Threshold_CancelRate_LowPrice"
-            , 50.0);
+        INIT_VAR(Should_Take_Condition_OrderCnt);
+        INIT_VAR(Should_Take_Condition_TimeProgress);
+        INIT_VAR(Should_Take_Threshold_FilledRate);
 
-        AlgoConstants::Allow_Make_Threshold_FilledRate_LowPrice = config.getConfigOrDefault("Category_ALGO"
-            ,"Allow_Make_Threshold_FilledRate_LowPrice"
-            , 30.0);
+        INIT_VAR(Should_Take_Condition_TimeProgress_LowPrice);
+        INIT_VAR(Should_Take_Threshold_FilledRate_LowPrice);
 
-        AlgoConstants::Should_Take_Condition_OrderCnt = config.getConfigOrDefault("Category_ALGO"
-            ,"Should_Take_Condition_OrderCnt"
-            , 6);
-
-        AlgoConstants::Should_Take_Condition_TimeProgress = config.getConfigOrDefault("Category_ALGO"
-            ,"Should_Take_Condition_TimeProgress"
-            , 0.15);
-
-        AlgoConstants::Should_Take_Threshold_FilledRate = config.getConfigOrDefault("Category_ALGO"
-            ,"Should_Take_Threshold_FilledRate"
-            , 50.0);
-
-        AlgoConstants::Should_Take_Condition_TimeProgress_LowPrice = config.getConfigOrDefault("Category_ALGO"
-            ,"Should_Take_Condition_TimeProgress_LowPrice"
-            , 0.3);
-
-        AlgoConstants::Should_Take_Threshold_FilledRate_LowPrice = config.getConfigOrDefault("Category_ALGO"
-            ,"Should_Take_Threshold_FilledRate_LowPrice"
-            ,30.0);
+        INIT_VAR(Short_Duration_Seconds);
+        INIT_VAR(LowPrice_Threshold);
 
         SPDLOG_INFO("init AlgoConstants done.");
         return 0;
     }
 
 }
-
-auto tmp = AlgoConstants::init();

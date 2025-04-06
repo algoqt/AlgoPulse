@@ -555,7 +555,7 @@ std::string TCPSessionManager::addStockConceptQuoteSubscribe(const std::shared_p
     return "";
 }
 
-void TCPSessionManager::pushMarketDepth(MarketDepth* md) {
+void TCPSessionManager::pushMarketDepth(const MarketDepth* md) {
 
     auto cmd = AlgoMsg::MsgAlgoCMD::CMD_PUSH_MarketDepth;
 
@@ -580,7 +580,7 @@ void TCPSessionManager::pushMarketDepth(MarketDepth* md) {
                 it->second->queueSendMessage2C(sendPkgPtr); 
             }
         }
-        if(auto it = m_subscribeSymbolMd.find(mdPtr->symbol); it != m_subscribeSymbolMd.end() ) {
+        if(auto it = m_subscribeSymbolMd.find(mdPtr->symbol()); it != m_subscribeSymbolMd.end() ) {
             for (auto const& socketId : it->second) {
                 if (auto it = m_tcpSessions.find(socketId); it != m_tcpSessions.end()) {
                     it->second->queueSendMessage2C(sendPkgPtr);

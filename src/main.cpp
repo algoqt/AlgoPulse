@@ -7,6 +7,9 @@
 #include "spdlog/sinks/rotating_file_sink.h"
 #include <csignal>
 #include "AlgoService.h"
+#include "Task_Register.h"
+#include "AlgoConstants.h"
+
 //#include <crtdbg.h> //_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 
 #if OUTPUT_LOG_TO_STD_OUT
@@ -66,6 +69,10 @@ int main() {
         #endif
 
         SPDLOG_INFO("SPDLOG_ACTIVE_LEVEL IS {}", SPDLOG_ACTIVE_LEVEL);
+
+        Task_Register::registerAlgoTasks();
+
+        AlgoConstants::init();
 
         AlgoService& asr = AlgoService::getInstance();
 

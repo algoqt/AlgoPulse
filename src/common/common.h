@@ -157,6 +157,7 @@ namespace agcommon {
     enum class MarketExchange {
         SZSE = 0,
         SHSE = 1,
+        BJSE = 2,
         unDefined = 99
     };
 
@@ -165,6 +166,15 @@ namespace agcommon {
 交易所简码 SZ / SH
 */
     std::string getMarketExchangeStrCode(const MarketExchange& exchange);
+
+    inline MarketExchange getMarketExchangeCode(const Symbol_t& symbol) {
+
+        if (symbol.ends_with("SZ"))  return MarketExchange::SZSE;
+        if (symbol.ends_with("SH")) return MarketExchange::SHSE;
+        if (symbol.ends_with("BJ")) return MarketExchange::BJSE;
+
+        return MarketExchange::unDefined;
+    }
 
  /*!
  SHSE和SZSE开头的股票代码转为.SH和.SZ 的形式
@@ -357,13 +367,13 @@ namespace agcommon {
 
     std::optional<OrderDate_t> parseDateStr(const std::string& input);
 
-    std::uint64_t ptime2Integer(const posix_time::ptime& pt);
+    std::uint64_t ptime2Integer(const posix_time::ptime& pt = posix_time::second_clock::local_time());
 
-    uint64_t  getDateTimeInt(const posix_time::ptime& pt);
+    uint64_t  getDateTimeInt(const posix_time::ptime& pt = posix_time::second_clock::local_time());
 
-    uint32_t  getDateInt(const posix_time::ptime& pt);
+    uint32_t  getDateInt(const posix_time::ptime& pt = posix_time::second_clock::local_time());
 
-    uint64_t  getTimeInt(const posix_time::ptime& pt);
+    uint64_t  getTimeInt(const posix_time::ptime& pt = posix_time::second_clock::local_time());
 
     std::optional<posix_time::ptime>  replaceDate(const posix_time::ptime& pt, uint32_t date);
 

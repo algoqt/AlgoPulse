@@ -23,11 +23,11 @@ public:
     }
 
 
-    void onMarketDepth(const MarketDepthKeepAlivePtr& md) {
+    void onMarketDepth(const MarketDepth* md) {
 
         std::scoped_lock  lock(m_mutex);
 
-        m_symbol2MdPtr[md->symbol] = md;
+        m_symbol2MdPtr[md->symbol()] = MarketDepthKeepAlivePtr(md);
 
     };
 

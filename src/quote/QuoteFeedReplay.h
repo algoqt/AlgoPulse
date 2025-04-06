@@ -1,7 +1,7 @@
 #pragma once
 
 #include "QuoteFeed.h"
-
+#include "MappedFileManager.h"
 /*
 * QuoteFeedReplay should dispatch with context run only in one thread, so it equal run with stand
 */
@@ -24,10 +24,6 @@ public:
 
     void unSubscribe(const uint64_t subcribeKey) override;
 
-    std::shared_ptr<QuoteFeedReplay> shared_from_this() {
-        return  std::static_pointer_cast<QuoteFeedReplay>(QuoteFeed::shared_from_this());
-    }
-
     QuoteTime_t getCurrentQuoteTime() override { return currentQuoteTime.load(); };
 
     double getVWAP(const Symbol_t& symobl, const QuoteTime_t& begTime, const QuoteTime_t& endTime) override;
@@ -49,5 +45,4 @@ private:
     void     _unSubscribe(const uint64_t subcribeKey);
 
     std::atomic<QuoteTime_t>                    currentQuoteTime;
-
 };

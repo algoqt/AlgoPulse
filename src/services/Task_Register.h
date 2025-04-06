@@ -7,19 +7,24 @@
 #include "Task_OnSubscribeMarketDepth.h"
 #include "Task_OnSubscribeStockConceptQuote.h"
 
-static int regiester_tasks() {
-	
-	Task_OnLogin::createTask();
+class Task_Register {
 
-	Task_onStartAlgoInstance::createTask();
+public:
 
-	Task_onUpdateAlgoInstance::createTask();
+	static int registerAlgoTasks() {
 
-	Task_OnMarektDepthQuery::createTask();
+		Task_OnLogin::createTaskInstance();
 
-	Task_OnSubscribeStockConceptQuote::createTask();
-	
-	Task_OnSubscribeMarketDepth::createTask();
+		Task_onStartAlgoInstance::createTaskInstance();
 
-	return 0;
-}
+		Task_onUpdateAlgoInstance::createTaskInstance();
+
+		Task_OnMarektDepthQuery::createTaskInstance();
+
+		Task_OnSubscribeStockConceptQuote::createTaskInstance();
+
+		Task_OnSubscribeMarketDepth::createTaskInstance();
+
+		return 0;
+	}
+};

@@ -31,7 +31,7 @@ message(status ${DEPENDENT_LIBS})
 
 find_package(ZLIB REQUIRED)
 
-find_package(Boost COMPONENTS REQUIRED coroutine context system)
+find_package(Boost COMPONENTS REQUIRED coroutine context system )
 
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
@@ -68,7 +68,7 @@ add_custom_command(
     COMMENT "Generating .pb.cc and .pb.h files from AlgoMessages.proto"
 )
 
-add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES} "services/Task.cpp" "services/Task_OnSubscribeMarketDepth.h" "services/Task_Register.h" "services/Task_OnLogin.h" "services/Task_onStartAlgoInstance.cpp" "services/Task_onUpdateAlgoInstance.h" "algo/AlgoConstants.cpp")
+add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES})
 add_subdirs_to_target_include_directories(algoPulse ${PROJECT_SOURCE_DIR})
 target_link_libraries(algoPulse Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
 
@@ -82,35 +82,53 @@ install(TARGETS algoPulse
     ARCHIVE DESTINATION lib
 )
 
-if(WIN32) 
+# Copy config file and handle DLL dependencies for algoPulse target
+add_custom_command(TARGET algoPulse POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying config.ini to $<TARGET_FILE_DIR:algoPulse>/../config/config.ini"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+        ${PROJECT_SOURCE_DIR}/../config/config.ini 
+        $<TARGET_FILE_DIR:algoPulse>/../config/config.ini
+    COMMENT "Copying config.ini to output directory"
+)
+
+if(WIN32)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(DEPENDENT_DLLS_PATH "${VCPKG_INSTALLED_DIR}/x64-windows/debug/bin")
-        foreach(DLL "hdf5_D.dll" "libprotobufd.dll" "zlibd1.dll" "szip_D.dll" "sqlite3.dll" "jemalloc.dll")
-            list(APPEND DEPENDENT_DLLS "${DEPENDENT_DLLS_PATH}/${DLL}")
-        endforeach()
+        set(DLL_LIST "hdf5_D.dll" "libprotobufd.dll" "zlibd1.dll" "szip_D.dll" "sqlite3.dll" "jemalloc.dll")
     else()
         set(DEPENDENT_DLLS_PATH "${VCPKG_INSTALLED_DIR}/x64-windows/bin")
-         foreach(DLL "hdf5.dll" "libprotobuf.dll" "zlib1.dll" "szip.dll" "sqlite3.dll" "jemalloc.dll")
-            list(APPEND DEPENDENT_DLLS "${DEPENDENT_DLLS_PATH}/${DLL}")
-        endforeach()
+        set(DLL_LIST "hdf5.dll" "libprotobuf.dll" "zlib1.dll" "szip.dll" "sqlite3.dll" "jemalloc.dll")
     endif()
 
-    foreach(DLL ${DEPENDENT_DLLS})
-       install(FILES "${DLL}" DESTINATION bin)
+    set(DEPENDENT_DLLS)
+    foreach(DLL ${DLL_LIST})
+        list(APPEND DEPENDENT_DLLS "${DEPENDENT_DLLS_PATH}/${DLL}")
     endforeach()
 
-    set(TARGET_OUTPUT_DIR $<TARGET_FILE_DIR:algoPulse>)
-    message(${TARGET_OUTPUT_DIR})
+    foreach(DLL ${DEPENDENT_DLLS})
+        if(EXISTS "${DLL}")
+            install(FILES "${DLL}" DESTINATION bin)
+        else()
+            message(WARNING "DLL not found: ${DLL}")
+        endif()
+    endforeach()
 
     add_custom_command(TARGET algoPulse POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Copying dependencies to ${TARGET_OUTPUT_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DEPENDENT_DLLS} ${TARGET_OUTPUT_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/../config/config.ini ${TARGET_OUTPUT_DIR}/../config/config.ini
-)
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying DLLs to output directory:$<TARGET_FILE_DIR:algoPulse>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${DEPENDENT_DLLS}
+            $<TARGET_FILE_DIR:algoPulse>
+        COMMENT "Copying required DLLs to build directory"
+    )
 endif()
+
 
 install(DIRECTORY
     ${PROJECT_SOURCE_DIR}/../config
     DESTINATION .
 )
+
+#add_executable(mdReader mdreader.cpp ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES})
+#target_link_libraries(mdReader Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
+#add_subdirs_to_target_include_directories(mdReader ${PROJECT_SOURCE_DIR})

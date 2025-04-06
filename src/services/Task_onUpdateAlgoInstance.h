@@ -112,9 +112,8 @@ class Task_onUpdateAlgoInstance :public Task {
 				resp->set_error_msg(algoErrMessage);
 				SPDLOG_ERROR(algoErrMessage);
 			}
-			//resp.PrintDebugString();
 		}
-
+		
 		TCPSessionManager::getInstance().sendResp2C(session, cmd_response, resp);
 
 		StorageService::getInstance().storeMessage(cmd, req, std::move(recvPkgPtr));

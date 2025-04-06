@@ -17,7 +17,7 @@ class AlgoTrader: public Trader {
 public:
 
     AlgoTrader(const std::shared_ptr<AlgoOrder>& _algoOrderPtr
-        , const AsioContextPtr& contextPtr = nullptr);
+        , const AsioContextPtr& _contextPtr = nullptr);
 
     ~AlgoTrader() = default;
 
@@ -53,7 +53,7 @@ public:
     virtual std::shared_ptr<AlgoOrder>  getAlgoOrder() const override { return algoOrderPtr; };
 
 
-    void onMarketDepth(MarketDepth* newMd) override;
+    void onMarketDepth(const MarketDepth* newMd) override;
 
     void onOrderUpdate(const Order* order) override;
 

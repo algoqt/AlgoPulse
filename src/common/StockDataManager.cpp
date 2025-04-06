@@ -889,7 +889,7 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
                             }
                             auto md = MarketDepth::make_intrusive(&tick, ssinfo->preClosePrice, ssinfo->unLAShare);
     
-                            auto [qit, qInserted] = symbol2quoteTime2md.try_emplace(md->symbol);
+                            auto [qit, qInserted] = symbol2quoteTime2md.try_emplace(md->symbol());
     
                             auto& qutoeTime2md = qit->second;
     
@@ -1000,7 +1000,7 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
                          if (qInserted) {
                              symbol2Md.reserve(symbols.size() / 10);
                          }
-                         symbol2Md.try_emplace(md->symbol,md);
+                         symbol2Md.try_emplace(md->symbol(),md);
 
                          ++totalLines;
                      }
@@ -1019,6 +1019,56 @@ size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& sym
 
      return totalLines;
 }
+
+std::unordered_map<Symbol_t, std::pair<double, double>> StockDataManager::getStockReturnAndRange(uint32_t beg_Date
+    , uint32_t end_Date
+    , const std::unordered_set<Symbol_t>& symbols) {
+
+    std::unordered_map<Symbol_t, std::pair<double, double>> result;
+
+    std::unordered_map<Symbol_t, std::pair<double, double>> symbol2MinMax;  // min,max
+    std::unordered_map<Symbol_t, std::pair<double, double>> symbol24Return; // window begin
+
+    auto dates = getTradeDates(beg_Date, end_Date);
+
+    //std::sort(dates.begin(), dates.end());
+
+    for (const auto& date : dates) {
+        SPDLOG_DEBUG("pre:{} ,date:{}", date.pre_trade_date, date.trade_date);
+        auto bars = getDailyBarBlock(date.trade_date, symbols);
+
+        for (const auto& [symbol, bar] : bars) {
+
+            auto [it, inserted] = symbol2MinMax.try_emplace(symbol, std::make_pair(10000000.0, 0));
+            if (it->second.first > bar->low * bar->adjFactor)
+                it->second.first = bar->low * bar->adjFactor;
+            if (it->second.second < bar->high * bar->adjFactor)
+                it->second.second = bar->high * bar->adjFactor;
+
+            auto [it2, inserted2] = symbol24Return.try_emplace(symbol, std::make_pair(0.0, 0.0));
+            if (it2->second.first == 0.0) {
+                it2->second.first = bar->preclose * bar->adjFactor;
+            }
+            it2->second.second = bar->close * bar->adjFactor;
+        }
+    }
+    for (const auto& symbol : symbols) {
+        double ret = 0;
+        double range = 0;
+        auto& retClose = symbol24Return[symbol];
+        if (retClose.first > 0) {
+            ret = retClose.second / retClose.first - 1.0;
+        }
+        auto& minMax = symbol2MinMax[symbol];
+        if (minMax.first > 0) {
+            range = minMax.second / minMax.first - 1.0;
+        }
+        result.emplace(symbol, std::make_pair(ret, range));
+    }
+
+    return result;
+}
+
 //
 //size_t StockDataManager::cacheFromH5Tick(const std::unordered_set<Symbol_t>& symbols
 //    , const QuoteTime_t& startTime

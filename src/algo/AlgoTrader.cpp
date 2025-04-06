@@ -8,9 +8,9 @@ using AlgoStatus        = agcommon::AlgoStatus;
 using AshareMarketTime  = agcommon::AshareMarketTime;
 
 AlgoTrader::AlgoTrader(const std::shared_ptr<AlgoOrder>& _algoOrderPtr
-    , const AsioContextPtr& c):
+    , const AsioContextPtr& _contextPtr):
 
-     Trader(c ? c : ContextService::getInstance().getHashedWorkerContext(_algoOrderPtr->symbol))
+     Trader(_contextPtr ? _contextPtr : ContextService::getInstance().getHashedWorkerContext(_algoOrderPtr->symbol))
     , algoOrderPtr(_algoOrderPtr)
     , algoOrderId(_algoOrderPtr->algoOrderId)
     , ssinfoPtr(nullptr)
@@ -209,8 +209,8 @@ asio::awaitable<void> AlgoTrader::start() {
     auto onOrderUpdate  = [self](const Order* order) { self->onOrderUpdate(order); };
     auto onTrade        = nullptr;
 
-    auto onMarketDepth = [self](MarketDepth* md) { self->onMarketDepth(md); };
-    co_OnMarketDepthCallback co_onMarketDepth = [self](MarketDepth* md) -> asio::awaitable<int> { co_return co_await self->co_onMarketDepth(md); };
+    auto onMarketDepth = [self](const MarketDepth* md) { self->onMarketDepth(md); };
+    co_OnMarketDepthCallback co_onMarketDepth = [self](const MarketDepth* md) -> asio::awaitable<int> { co_return co_await self->co_onMarketDepth(md); };
 
     auto subscribeOrderUpdate = std::make_shared<SubscribeOrder_t>(algoOrderId, onOrderUpdate, onTrade,contextPtr);
 
@@ -456,7 +456,7 @@ void AlgoTrader::onOrderUpdate(const Order* order) {
 
 };
 
-void AlgoTrader::onMarketDepth(MarketDepth* newMd) {  //shoud dispatch in trader's context
+void AlgoTrader::onMarketDepth(const MarketDepth* newMd) {  //shoud dispatch in trader's context
     
     if (isStopped()) {
         return;
@@ -522,7 +522,7 @@ asio::awaitable<void> AlgoTrader::schedual() {
 
         int durationPerSlicer, roundsPerSlicer;
 
-        if (algoDuration < 5 * 60) {
+        if (algoDuration < AlgoConstants::Short_Duration_Seconds) {
 
             durationPerSlicer = 40;
             roundsPerSlicer = 2;
@@ -532,7 +532,7 @@ asio::awaitable<void> AlgoTrader::schedual() {
             durationPerSlicer = 60;
             roundsPerSlicer = 3;
         }
-        if (ssinfoPtr->preClosePrice < 6) {
+        if (ssinfoPtr->preClosePrice < AlgoConstants::LowPrice_Threshold) {
 
             durationPerSlicer = 60;
             roundsPerSlicer = 2;
@@ -757,7 +757,7 @@ asio::awaitable<void> AlgoTrader::slicePolicy(Slicer& slicer) {
     } 
     {
         qty2Take_round = getQtyShinkImpact(qty2Take_round);
-        double price2Take_round = getPriceCover4Take(qty2Take_round,0.5);
+        double price2Take_round = getPriceCover4Take(qty2Take_round,0);
         if (allow2Take and qty2Take_round > 0) {
             SPDLOG_INFO("[aId:{}][Taker]{}@{:.3f}", algoOrderId,qty2Take_round, price2Take_round);
             placeOrder(qty2Take_round, price2Take_round);
@@ -820,7 +820,7 @@ asio::awaitable<void> AlgoTrader::lastSlicePolicy(Slicer& slicer) {
             qtyTotalRemain = ssinfoPtr->floor2FitLotSize(qtyTotalRemain);
         }
         double currentProgress = slicer.cumQty - slicer.qty2make_remain > 0 ? algoPerf.qtyFilled * 1.0 / (slicer.cumQty - slicer.qty2make_remain) : 0;
-        double price2Take = getPriceCover4Take(qtyTotalRemain, 0.1);
+        double price2Take = getPriceCover4Take(qtyTotalRemain, 0.2);
         SPDLOG_INFO("[aId:{}][index{},R{}][pg:{:.2f},pr:{:.2f}],duration:{:.2f},qtyTotalRemain:{},price2Take:{:.3f},{}",
                             algoOrderId, slicer.index, slicer.rounds_remain, currentProgress, algoPerf.makerFilledRate, slicer.duration_remain, qtyTotalRemain, price2Take, lob);
         placeOrder(qtyTotalRemain, price2Take, false);
@@ -919,7 +919,7 @@ void AlgoTrader::slicePolicyOnSignal(const PolicyAction& action, const double pr
 
 double AlgoTrader::getPriceCover4Take(int qty, double coverRate) {
 
-    coverRate = coverRate != 0 ? coverRate : AlgoConstants::Default_CoverRate;
+    coverRate = coverRate != 0 ? coverRate : AlgoConstants::Default_Take_Confident_CoverRate;
 
     int volsum = 0;
     double price = 0.0;
@@ -979,7 +979,7 @@ int32_t AlgoTrader::getQtyShinkImpact(int32_t qty2take) {
 
 double AlgoTrader::getPrice4Make(int qty2Make) {
 
-    if (algoPerf.makerFilledRate > 80.0) {
+    if (algoPerf.makerFilledRate > AlgoConstants::Maker_Price_Threshold_FilledRate) {
         if (agcommon::isBuy(algoOrderPtr->tradeSide)) {
             return m_md->bidPrice2;
         } else {

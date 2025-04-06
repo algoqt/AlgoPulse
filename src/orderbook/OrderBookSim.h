@@ -32,7 +32,7 @@ public:
 
     void unSubscribe(const SubscribeOrderKey_t& subcribeKey) override;
 
-    void onMarketDepth(MarketDepth* md) override;
+    void onMarketDepth(const MarketDepth* md) override;
 
     void addPosition(const PositionInfo& position);
 
@@ -52,7 +52,7 @@ public:
 
 private:
 
-    MarketDepth* getMarketDepth(const Symbol_t& symbol);
+    const MarketDepth* getMarketDepth(const Symbol_t& symbol);
 
     std::map<PositionKey_t, std::map<Symbol_t, PositionInfo>> init_positions{};
 

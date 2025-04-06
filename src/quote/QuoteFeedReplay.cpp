@@ -6,7 +6,7 @@ QuoteFeedReplay::QuoteFeedReplay(const QuoteFeedRequest& req)
     : m_request(req)
     , QuoteFeed(req.dispatchContextPtr, req.startTime)
     , m_keepRuning(false) 
-    , currentQuoteTime(req.startTime){
+    , currentQuoteTime(req.startTime) {
 };
 
 
@@ -18,7 +18,9 @@ void QuoteFeedReplay::stop() {
 
     m_keepRuning = false;
 
-    asio::post(m_strand, [self = shared_from_this()]() {
+    
+
+    asio::post(m_strand, [self = keep_alive_this<QuoteFeedReplay>()]() {
         SPDLOG_INFO("[aId:{}]QuoteFeedReplay on finish,size:{}", self->m_request.algoOrderId, self->onQuoteFeedFinisheds.size());
 
         for (auto& [onRepalyFinished, contextPtr] : self->onQuoteFeedFinisheds) {
@@ -47,7 +49,7 @@ SubscribeKey_t QuoteFeedReplay::subscribe(std::shared_ptr<SubMarketDepth_t> subP
     assert(subPtr->dispatchContextPtr != nullptr);
     assert(subPtr->subscribeKey > 0);
 
-    asio::post(m_strand, [self = shared_from_this(), subPtr]() {
+    asio::post(m_strand, [self = keep_alive_this<QuoteFeedReplay>(), subPtr]() {
         self->_subscribe(subPtr);
         });
 
@@ -70,7 +72,7 @@ uint64_t QuoteFeedReplay::_subscribe(std::shared_ptr<SubMarketDepth_t> subPtr) {
 
 void QuoteFeedReplay::unSubscribe(const uint64_t subcribeKey) {
 
-    asio::post(m_strand, [self = shared_from_this(), subcribeKey]() {
+    asio::post(m_strand, [self = keep_alive_this<QuoteFeedReplay>(), subcribeKey]() {
         self->_unSubscribe(subcribeKey);
         });
 }
@@ -93,7 +95,7 @@ void QuoteFeedReplay::run() {
     if (not m_keepRuning) {
         SPDLOG_INFO("[aId:{}]QuoteFeedReplay launching....", m_request.algoOrderId);
 
-        asio::co_spawn(m_strand, co_run(), [self = shared_from_this()](std::exception_ptr ex) {
+        asio::co_spawn(m_strand, co_run(), [self = keep_alive_this<QuoteFeedReplay>()](std::exception_ptr ex) {
             self->stop();
             if (!ex) {
                 SPDLOG_INFO("[aId:{}]QuoteFeedReplay done", self->m_request.algoOrderId);
@@ -140,14 +142,12 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
             if (m_keepRuning) {
                 SPDLOG_DEBUG("MarketDepth:{}", md->to_string());
                 md->retainAlive();
-                if (m_symbol2md.find(md->symbol) == m_symbol2md.end()) {
-                    m_symbol2md[md->symbol] = md;
-                }
-                else {
-                    auto& lastMd = m_symbol2md[md->symbol];
+                auto [it,inserted] = m_symbol2md.try_emplace(md->symbol(),md);
+                if (not inserted) {
+                    auto& lastMd = it->second;
                     md->calDelta(lastMd);
                     lastMd->release();
-                    m_symbol2md[md->symbol] = md;
+                    it->second = md;
                 }
 
                 for (const auto& [orderBookKey, onPair] : m_orderBookKey2CallBack) {
@@ -157,7 +157,7 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
                     }
                 }
 
-                if (const auto subCallBackMap_it = m_symbol2SubscribeCallBack.find(md->symbol); subCallBackMap_it != m_symbol2SubscribeCallBack.end()) {
+                if (const auto subCallBackMap_it = m_symbol2SubscribeCallBack.find(md->symbol()); subCallBackMap_it != m_symbol2SubscribeCallBack.end()) {
 
                     for (auto& [subKey, subMarketDepth] : subCallBackMap_it->second) {
                         SPDLOG_DEBUG("[{}]subMarketDepth:{}", subKey, md->to_string());
@@ -228,7 +228,7 @@ double QuoteFeedReplay::getVWAP(const Symbol_t& symbol, const QuoteTime_t& begTi
     SPDLOG_DEBUG("VWAP:{},{},{}:{:.2f},{},{:.2f},{}", symbol, agcommon::getDateTimeInt(begTime), agcommon::getDateTimeInt(endTime)
         ,beg_amt, beg_vol, end_amt, end_vol);
 
-    if (end_amt > beg_amt and end_vol - beg_vol) {
+    if (end_amt > beg_amt and end_vol - beg_vol > 0) {
         vwap = (end_amt -  beg_amt)*1.0 / (end_vol - beg_vol);
     }
    

@@ -523,7 +523,7 @@ void OrderBookSim::_onTrade(Trade* trade) {
 }
 
 /* m_request.runContextPtr runs only in one thread */
-void OrderBookSim::onMarketDepth(MarketDepth* md) {
+void OrderBookSim::onMarketDepth(const MarketDepth* md) {
 
     if (isStopped())
         return;
@@ -532,7 +532,7 @@ void OrderBookSim::onMarketDepth(MarketDepth* md) {
 
         //agcommon::TimeCost tc(fmt::format("{},{}",agcommon::getDateTimeStr(md->quoteTime), md->price));
 
-        self->m_mds[md->symbol] = md;
+        self->m_mds[md->symbol()] = md;
 
         self->simOrderMatchFill(md.get());
     });
@@ -543,18 +543,18 @@ void OrderBookSim::_onMarketDepth(MarketDepth* new_md) {
         return;
     SPDLOG_DEBUG("orderBook onMarketDepth:{}", new_md->to_string());
     new_md->retainAlive();
-    auto it = m_mds.find(new_md->symbol);
+    auto it = m_mds.find(new_md->symbol());
     if (it != m_mds.end()) {
         it->second->release();
         it->second = new_md;
     }
     else {
-        m_mds[new_md->symbol] = new_md;
+        m_mds[new_md->symbol()] = new_md;
     }
     simOrderMatchFill(new_md);
 }
 
-MarketDepth* OrderBookSim::getMarketDepth(const Symbol_t& symbol) {
+const MarketDepth* OrderBookSim::getMarketDepth(const Symbol_t& symbol) {
 
     if (auto it = m_mds.find(symbol);it != m_mds.end()) {
         return it->second.get();
@@ -569,13 +569,13 @@ void OrderBookSim::simOrderMatchFill(const MarketDepth* const md) {
         return;
     }
 
-    auto& _unfinishs = symbol2UnFinishedOrders[md->symbol];
+    auto& _unfinishs = symbol2UnFinishedOrders[md->symbol()];
 
     //SPDLOG_INFO("[{}] ORDERS SIZE:{}", md->symbol, _unfinishs.size());
     if (_unfinishs.empty()) {
 
         for(auto& [symbolKey,pi] : positionInfos){
-            if (pi.symbol == md->symbol) {
+            if (pi.symbol == md->symbol()) {
                 pi.lastPrice = md->price;
                 pi.mktValue = pi.currentQty * md->price;
             }

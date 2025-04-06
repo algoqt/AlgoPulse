@@ -17,7 +17,7 @@ class ShotTrader : public Trader {
 public:
 
     ShotTrader(const std::shared_ptr<AlgoOrder>& _algoOrderPtr
-        , const AsioContextPtr& contextPtr = nullptr
+        , const AsioContextPtr& _contextPtr = nullptr
         , std::unordered_set<Symbol_t> _symbols = {}) ;
 
     AlgoErrorMessage_t preStartCheck()  override;
@@ -26,7 +26,7 @@ public:
 
     void stop(const std::string& reasion) override;
 
-    void onMarketDepth(MarketDepth* md)   override;
+    void onMarketDepth(const MarketDepth* md)   override;
 
     void onOrderUpdate(const Order* order) override;
 
@@ -48,7 +48,7 @@ public:
 
 private:
 
-    void algoShot(MarketDepth* md);
+    void algoShot(const MarketDepth* md);
 
     void performanceSummary(bool backTestDone = false);
 

@@ -28,7 +28,10 @@
       "displayName": "Linux Release",
       "description": "面向适用于 Linux 的 Windows 子系统(WSL)或远程 Linux 系统。",
       "inherits": "linux-debug",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OUTPUT_LOG_TO_STD_OUT": true
+      }
     },
     {
       "name": "macos-debug",

@@ -2,13 +2,13 @@
 
 #include "common.h"
 #include "MarketDepth.h"
-#include <set>
+#include "EnableSelfHelper.h"
 
 using AsioContextPtr = std::shared_ptr<asio::io_context>;
 
-using OnMarketDepthCallback = std::function<void(MarketDepth*)>;
+using OnMarketDepthCallback = std::function<void(const MarketDepth*)>;
 
-using co_OnMarketDepthCallback = std::function<asio::awaitable<int>(MarketDepth*)>;
+using co_OnMarketDepthCallback = std::function<asio::awaitable<int>(const MarketDepth*)>;
 
 using OnDelayTestCallback = std::function<void(agcommon::TimeCost& delay)>;
 
@@ -48,7 +48,8 @@ struct QuoteFeedRequest {
     AsioContextPtr          dispatchContextPtr{ nullptr };
 };
 
-class QuoteFeed : public std::enable_shared_from_this<QuoteFeed> {
+
+class QuoteFeed : public EnableSelfHelper<QuoteFeed> {
 
 public:
     QuoteFeed(std::shared_ptr<asio::io_context> contextPtr, const QuoteTime_t& currentQuoteTime = agcommon::now())
@@ -56,6 +57,7 @@ public:
         , m_strand(contextPtr->get_executor())
         , lastTestQuoteTime(currentQuoteTime) {
     };
+    virtual ~QuoteFeed() = default;
 
     virtual void run() = 0;
 
@@ -81,17 +83,15 @@ public:
 
     virtual double getVWAP(const Symbol_t& symobl
         , const QuoteTime_t& begTime
-        , const QuoteTime_t& endTime) {
-        return 0;
-    };
+        , const QuoteTime_t& endTime) {    return 0;    };
 
     template<class T>
         requires std::is_base_of_v<QuoteFeed, T>
     inline void statDelay(agcommon::TimeCost& delay) {
 
-        auto self = std::static_pointer_cast<T>(shared_from_this());
+        auto self = keep_alive_this<T>();
 
-        if (agcommon::getSecondsDiff(lastTestQuoteTime, self->getCurrentQuoteTime()) > 60) {
+        if (agcommon::getSecondsDiff(self->lastTestQuoteTime, self->getCurrentQuoteTime()) > 60) {
 
             for (auto& [orderBookKey, onPair] : m_orderBookKey2CallBack) {
 
@@ -126,5 +126,18 @@ public:
     std::vector<std::pair<std::function<void()>, AsioContextPtr>>      onQuoteFeedFinisheds;
 
     QuoteTime_t  lastTestQuoteTime;
+
+    //template<class T>
+    //    requires std::is_base_of_v<QuoteFeed, T>
+    //std::shared_ptr<T> keep_alive_this() {
+
+    //    return std::static_pointer_cast<T>(shared_from_this());
+    //}
+    //template<class T>
+    //    requires std::is_base_of_v<QuoteFeed, T>
+    //std::shared_ptr<const T> keep_alive_this() const {
+
+    //    return std::static_pointer_cast<const T>(shared_from_this());
+    //}
 
 };

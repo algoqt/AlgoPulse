@@ -15,67 +15,13 @@ class MarketDepth;
 
 using UnorderMarketDepthMap    = boost::unordered::unordered_map<Symbol_t, MarketDepth>;
 
-using MarketDepthKeepAlivePtr  = boost::intrusive_ptr<MarketDepth>;
+using MarketDepthKeepAlivePtr  = boost::intrusive_ptr<const MarketDepth>;
 
 using UnorderMarketDepthPtrMap = boost::unordered::unordered_map<Symbol_t, MarketDepthKeepAlivePtr>;
 
 using UnorderMarketDepthRawPtrMap = boost::unordered::unordered_map<Symbol_t, MarketDepth*>;
 
-class MarketDepth: public KeepAlivePool<MarketDepth> {
-
-public:
-    Symbol_t symbol                 {};
-
-    double price    {0};
-    double preClose {0};
-    double open     {0};
-    double high     {0};
-    double low      {0};
-
-    double   change     {0};
-    double   changeP    {0};
-
-    uint64_t volume     {0};
-    double   amount     {0};
-    double   avgPrice   {0};
-
-    double   bidPrice1    {0};
-    int      bidVol1      {0};
-
-    double   bidPrice2    {0};
-    int      bidVol2      {0};
-    double   bidPrice3    {0};
-    int      bidVol3      {0};
-    double   bidPrice4    {0};
-    int      bidVol4      {0};
-    double   bidPrice5    {0};
-    int      bidVol5      {0};
-
-    double   askPrice1    {0};
-    int      askVol1      {0};
-    double   askPrice2    {0};
-    int      askVol2      {0};
-    double   askPrice3    {0};
-    int      askVol3      {0};
-    double   askPrice4    {0};
-    int      askVol4      {0};
-    double   askPrice5    {0};
-    int      askVol5      {0};
-    double   turnRate     { 0.0 };  // %
-
-    OrderTime_t quoteTime   { boost::posix_time::min_date_time};
-
-    int     bsType          {0};
-
-    int     deltaVolume     {0};
-
-    double  deltaAmount     {0};
-
-    double  flow            {0};
-
-
-protected:
-
+class MarketDepth: public KeepAliveObject<MarketDepth> {
 
 public:
 
@@ -85,11 +31,13 @@ public:
 
     //MarketDepth(const MarketDepth&);
 
-    //MarketDepth& operator=(const MarketDepth&);
+    MarketDepth& operator=(const MarketDepth&);
 
     MarketDepth(const Symbol_t& _symbol,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
 
     MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ = 0);
+
+    inline Symbol_t symbol() const { return fmt::format("{:06}.{}", _symbol, agcommon::getMarketExchangeStrCode(exchange)); };
 
     std::vector<std::pair<double,int>> getAskQuotes() const;
 
@@ -108,11 +56,14 @@ public:
     }
 
     inline agcommon::MarketExchange getMarketExchange() const { 
-        if (symbol.ends_with("SZ"))
-            return agcommon::MarketExchange::SZSE;
-        if (symbol.ends_with("SH"))
-            return agcommon::MarketExchange::SHSE;
-        return agcommon::MarketExchange::unDefined;
+        //if (symbol.ends_with("SZ"))
+        //    return agcommon::MarketExchange::SZSE;
+        //if (symbol.ends_with("SH"))
+        //    return agcommon::MarketExchange::SHSE;
+        //if (symbol.ends_with("BJ"))
+        //    return agcommon::MarketExchange::BJSE;
+        //return agcommon::MarketExchange::unDefined;
+        return exchange;
     }
 
     std::map<double, int> calDelta(const MarketDepth* lastMd);
@@ -122,4 +73,57 @@ public:
     std::string to_string() const;
 
     std::shared_ptr<AlgoMsg::MsgMarketDepth> encode2AlgoMessage() const;
+
+
+public:
+
+    uint32_t                _symbol{ 0 };
+    agcommon::MarketExchange  exchange{ agcommon::MarketExchange::unDefined };
+
+    double price{ 0 };
+    double preClose{ 0 };
+    double open{ 0 };
+    double high{ 0 };
+    double low{ 0 };
+
+    double   change{ 0 };
+    double   changeP{ 0 };
+
+    uint64_t volume{ 0 };
+    double   amount{ 0 };
+    double   avgPrice{ 0 };
+
+    double   bidPrice1{ 0 };
+    int      bidVol1{ 0 };
+
+    double   bidPrice2{ 0 };
+    int      bidVol2{ 0 };
+    double   bidPrice3{ 0 };
+    int      bidVol3{ 0 };
+    double   bidPrice4{ 0 };
+    int      bidVol4{ 0 };
+    double   bidPrice5{ 0 };
+    int      bidVol5{ 0 };
+
+    double   askPrice1{ 0 };
+    int      askVol1{ 0 };
+    double   askPrice2{ 0 };
+    int      askVol2{ 0 };
+    double   askPrice3{ 0 };
+    int      askVol3{ 0 };
+    double   askPrice4{ 0 };
+    int      askVol4{ 0 };
+    double   askPrice5{ 0 };
+    int      askVol5{ 0 };
+    double   turnRate{ 0.0 };  // %
+
+    OrderTime_t quoteTime{ boost::posix_time::min_date_time };
+
+    int     bsType{ 0 };
+
+    int     deltaVolume{ 0 };
+
+    double  deltaAmount{ 0 };
+
+    double  flow{ 0 };
 };

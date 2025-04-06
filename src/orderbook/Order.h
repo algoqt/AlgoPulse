@@ -8,7 +8,7 @@ using BrokerOrderNo_t = std::string;
 
 constexpr auto ALGO_MIN_DATE_TIME = boost::posix_time::min_date_time;
 
-struct Order :KeepAlivePool<Order> {
+struct Order :KeepAliveObject<Order> {
 
     OrderId_t orderId       {};
 
@@ -116,7 +116,7 @@ public:
 
 };
 
-struct Trade: KeepAlivePool<Trade> {
+struct Trade: KeepAliveObject<Trade> {
 
     OrderId_t   tradeId{};
 

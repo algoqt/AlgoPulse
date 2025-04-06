@@ -20,7 +20,7 @@ void AlgoPerformance::performanceSummay(const MarketDepth* md) {
 
     timeProgress = agcommon::getTimeProgress(startTime, endTime);
 
-    if (md and md->symbol == symbol) {
+    if (md and md->symbol() == symbol) {
 
         if ((md->quoteTime - startTime).total_seconds() > -2 && (md->quoteTime - endTime).total_seconds() < -2) {
 
