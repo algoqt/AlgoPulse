@@ -390,7 +390,7 @@ void AlgoTrader::placeOrder(const int qty, const double price,bool checkMinAmtPe
         order->quoteTime = m_md->quoteTime;
         order->updTime = agcommon::now();
 
-        algoPerf.onOrderRequest(order, m_md.get());
+        algoPerf.onOrderNew(order, m_md.get());
 
         SPDLOG_DEBUG("[OrderNew]{},bid1/ask1:{},{},qtime:{},total qty:{}", order->to_string(), m_md->bidPrice1, m_md->askPrice1, agcommon::getTimeStr(m_md->quoteTime),algoPerf.qty);
         
@@ -554,9 +554,9 @@ asio::awaitable<void> AlgoTrader::schedual() {
             agcommon::getDateTimeStr(startTime), agcommon::getDateTimeStr(endTime), rand_d, algoDuration, numOfSlicers);
 
         double remainTime = algoDuration - durationPerSlicer * (cumQtyOfSlicers.size() - 1);
-        double bias = 0.05;
-        if (ssinfoPtr->preClosePrice < 6) {
-            bias = 0.10;
+        double bias = AlgoConstants::Bias;
+        if (ssinfoPtr->preClosePrice < AlgoConstants::LowPrice_Threshold) {
+            bias = AlgoConstants::LowPrice_Bias;
         }
         std::vector<double> ExecProgressAllowedBias(cumQtyOfSlicers.size(), bias);
 

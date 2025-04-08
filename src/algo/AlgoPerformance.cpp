@@ -54,7 +54,7 @@ void AlgoPerformance::performanceSummay(const MarketDepth* md) {
     }
 }
 
-void AlgoPerformance::onOrderRequest(const OrderPtr& order, const MarketDepth* md) {
+void AlgoPerformance::onOrderNew(const OrderPtr& order, const MarketDepth* md) {
 
     orderId2Order[order->orderId] = order;
 

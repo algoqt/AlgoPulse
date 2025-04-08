@@ -25,8 +25,6 @@ void TCPSession::start(const AlgoMessagePkgHandle_t& handler)
 
     do_read_header();
 
-    //m_socketHandle = m_socket.native_handle();
-
     auto ip = m_socket.remote_endpoint().address().to_string();
 
     auto port = m_socket.remote_endpoint().port();

@@ -17,9 +17,7 @@ struct Wait2Resume {
 
 	inline asio::awaitable<void> wait() {
 		
-		if (marketDepthTimer.expires_at() > std::chrono::steady_clock::now()) {
-			marketDepthTimer.cancel();
-		}
+		clear();
 
 		marketDepthTimer.expires_at(boost::asio::steady_timer::time_point::max());
 		auto t = co_await marketDepthTimer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));

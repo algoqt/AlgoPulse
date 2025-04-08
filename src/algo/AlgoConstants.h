@@ -25,6 +25,9 @@ namespace AlgoConstants {
     static inline double Short_Duration_Seconds = 300.0;
     static inline double LowPrice_Threshold = 6.0;
 
+    static inline double Bias = 0.05;
+
+    static inline double LowPrice_Bias = 0.1;
 
     int init() ;
 

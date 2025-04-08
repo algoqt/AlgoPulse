@@ -127,17 +127,4 @@ public:
 
     QuoteTime_t  lastTestQuoteTime;
 
-    //template<class T>
-    //    requires std::is_base_of_v<QuoteFeed, T>
-    //std::shared_ptr<T> keep_alive_this() {
-
-    //    return std::static_pointer_cast<T>(shared_from_this());
-    //}
-    //template<class T>
-    //    requires std::is_base_of_v<QuoteFeed, T>
-    //std::shared_ptr<const T> keep_alive_this() const {
-
-    //    return std::static_pointer_cast<const T>(shared_from_this());
-    //}
-
 };

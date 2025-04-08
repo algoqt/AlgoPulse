@@ -4,7 +4,7 @@
 
 
 AlgoErrorCode Task_onStartAlgoInstance::dispatchAlgoOrder(const std::shared_ptr<AlgoOrder>& algoOrder
-	, AlgoErrorMessage_t& algoErrMessage) {
+	, AlgoErrorMessage_t& algoErrorMessage) {
 
 	auto& algoSerive = AlgoService::getInstance();
 	AlgoErrorCode algoErrorCode = AlgoErrorCode::ALGO_OK;
@@ -37,12 +37,12 @@ AlgoErrorCode Task_onStartAlgoInstance::dispatchAlgoOrder(const std::shared_ptr<
 	//}
 
 	default:
-		algoErrMessage = fmt::format("{},unsupport algo_category:{}.", algoOrder->clientAlgoOrderId, AlgoMsg::MsgAlgoCategory_Name(algoOrder->algoCategory));
-		SPDLOG_ERROR(algoErrMessage);
+		algoErrorMessage = fmt::format("{},unsupport algo_category:{}.", algoOrder->clientAlgoOrderId, AlgoMsg::MsgAlgoCategory_Name(algoOrder->algoCategory));
+		SPDLOG_ERROR(algoErrorMessage);
 		return AlgoErrorCode::ALGO_ERROR;
 	}
 
-	if (algoErrorCode == AlgoErrorCode::ALGO_OK and algoErrMessage == "") {
+	if (algoErrorCode == AlgoErrorCode::ALGO_OK and algoErrorMessage.empty()) {
 
 		algoSerive.m_totalTraders.fetch_add(1);
 
@@ -83,9 +83,9 @@ AlgoErrorCode Task_onStartAlgoInstance::dispatchAlgoOrder(const std::shared_ptr<
 	}
 	else {
 
-		asio::post(*traderPtr->contextPtr, [traderPtr, algoErrMessage]() { traderPtr->stop(algoErrMessage); });
+		asio::post(*traderPtr->contextPtr, [traderPtr, algoErrorMessage]() { traderPtr->stop(algoErrorMessage); });
 
-		SPDLOG_ERROR("[aId:{}]AlgoTrader::preStartCheck() failed:{}", algoOrder->algoOrderId, algoErrMessage);
+		SPDLOG_ERROR("[aId:{}]AlgoTrader::preStartCheck() failed:{}", algoOrder->algoOrderId, algoErrorMessage);
 
 		algoErrorCode = AlgoErrorCode::ALGO_ORDERCHECK_FAILED;
 	}
@@ -219,7 +219,7 @@ std::vector<std::shared_ptr<AlgoOrder>> Task_onStartAlgoInstance::createAlgoOrde
 	return algoOrders;
 }
 
-void Task_onStartAlgoInstance::onAlgoInstanceFinished(const std::shared_ptr<Trader>& traderPtr, const std::exception_ptr ex) {
+void Task_onStartAlgoInstance::onAlgoInstanceFinished(const std::shared_ptr<Trader>& traderPtr, const std::exception_ptr& ex) {
 
 	auto& algoSerive = AlgoService::getInstance();
 

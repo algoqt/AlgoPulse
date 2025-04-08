@@ -92,7 +92,7 @@ public:
 
     inline void release() { orderId2Order.clear(); }
 
-    void onOrderRequest(const OrderPtr& order, const MarketDepth* md);
+    void onOrderNew(const OrderPtr& order, const MarketDepth* md);
 
     void onOrderRecUpdate(const OrderPtr& order);
 

@@ -32,7 +32,7 @@
 
    同时onMarketDepth时，可以根据盘口变化或自己的预测信号，决策切片内委托采用take还是make:
     
-       onMarketDepth(MarketDepth* newMd){
+       onMarketDepth(const MarketDepth* newMd){
 
             algoPerf.performanceSummay(newMd);
             executeSignal(newMd,m_md.get()); // quick act on predict LOB change if possible
@@ -40,6 +40,13 @@
 
    如果不定义executeSignal,则按照执行进度在协程调度下完成各切片的执行.
    回测时,遇到定时器时回测协程会挂起，等待回放行情行进至该时刻时，协程恢复执行.
+
+### 算法绩效
+
+   * VWAP-Slippage受多个因素影响，盘口的变动程度及同时段市场的趋势等，同时风控因素约束了挂单及撤单行为，较严的风控合规比如限制最低的成交率(80%)和最大的撤单率(20%)，
+   将带来take order的占比不会低。
+   * 一般情况下，当成交进度落后预期进度较大时，take总是更优先的，等待风险和市场冲击需要兼顾考虑。
+   * 一些常见的算法风控、policy action的设置见 config.ini的 Category_ALGO类参数
 
 ### 日内交易策略示例（事件驱动）
 

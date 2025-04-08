@@ -117,5 +117,5 @@ class Task_onStartAlgoInstance :public Task {
 
 	void onAlgoInstanceFinished(
 		const std::shared_ptr<Trader>& traderPtr
-		, const std::exception_ptr ex);
+		, const std::exception_ptr& ex);
 };

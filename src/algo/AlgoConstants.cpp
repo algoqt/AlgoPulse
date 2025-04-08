@@ -42,6 +42,9 @@ namespace AlgoConstants {
         INIT_VAR(Short_Duration_Seconds);
         INIT_VAR(LowPrice_Threshold);
 
+        INIT_VAR(Bias);
+        INIT_VAR(LowPrice_Bias);
+
         SPDLOG_INFO("init AlgoConstants done.");
         return 0;
     }
