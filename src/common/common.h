@@ -158,7 +158,8 @@ namespace agcommon {
         SZSE = 0,
         SHSE = 1,
         BJSE = 2,
-        unDefined = 99
+        HKSE = 3,
+        unDefined = 9,
     };
 
 
@@ -169,9 +170,9 @@ namespace agcommon {
 
     inline MarketExchange getMarketExchangeCode(const Symbol_t& symbol) {
 
-        if (symbol.ends_with("SZ"))  return MarketExchange::SZSE;
-        if (symbol.ends_with("SH")) return MarketExchange::SHSE;
-        if (symbol.ends_with("BJ")) return MarketExchange::BJSE;
+        if (symbol.ends_with("SZ") or symbol.ends_with("SZSE"))  return MarketExchange::SZSE;
+        if (symbol.ends_with("SH") or symbol.ends_with("SHSE")) return MarketExchange::SHSE;
+        if (symbol.ends_with("BJ") or symbol.ends_with("BJSE")) return MarketExchange::BJSE;
 
         return MarketExchange::unDefined;
     }
@@ -376,6 +377,8 @@ namespace agcommon {
     uint64_t  getTimeInt(const posix_time::ptime& pt = posix_time::second_clock::local_time());
 
     std::optional<posix_time::ptime>  replaceDate(const posix_time::ptime& pt, uint32_t date);
+
+    time_t to_timestamp(const boost::posix_time::ptime& t);
 
     uint64_t getTotalMilliSeconds();
 

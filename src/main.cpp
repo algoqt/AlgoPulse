@@ -83,7 +83,7 @@ int main() {
         }
     }
     catch (std::exception& e) {
-        SPDLOG_ERROR("START ALGO SERVICE Failed:{}", e.what());
+       SPDLOG_ERROR("START ALGO SERVICE Failed:{}", e.what());
     }
 
     SPDLOG_INFO("service exit");

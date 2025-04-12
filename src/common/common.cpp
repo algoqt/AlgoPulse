@@ -97,7 +97,15 @@ namespace agcommon
             return std::nullopt;
         }
     }
-
+/*!
+    convet to time_t
+*/
+    time_t to_timestamp(const boost::posix_time::ptime& t) {
+        static const boost::posix_time::ptime epoch(
+            boost::gregorian::date(1970, 1, 1)
+        );
+        return (t - epoch).total_seconds();
+    }
 /*!
     当天凌晨至今的毫秒数
 */

@@ -12,221 +12,270 @@ namespace bip = boost::interprocess;
 
 #pragma pack(push, 1) // 确保紧密内存布局
 struct MappedFileHeader {
-    uint64_t magicNumber = 0x4D445354; // "MDST" in hex
     uint32_t version = 1;
-    uint64_t recordCount = 0;
-    uint64_t fileSize = 0;
-    time_t   createTime = 0;
-    time_t   lastUpdateTime = 0;
+    uint64_t size = 0;
+    uint64_t capacity = 0;
     std::atomic<uint32_t>   readers = 0;
 };
+
 #pragma pack(pop)
 
-template<class T>
-class MappedFileWriter: public std::enable_shared_from_this<MappedFileWriter<T>> {
+struct EmptyIndexEntry {};
+
+template<typename T>
+struct IndexTraits {
+    using IndexType = EmptyIndexEntry;
+    static constexpr bool enabled = false;
+};
+
+template<typename T>
+class MappedFileManager;
+
+template<typename T>
+class MappedFileWriter : public std::enable_shared_from_this<MappedFileWriter<T>> {
+
+    friend class MappedFileManager<T>;
+
+    using IndexEntryT = typename IndexTraits<T>::IndexType;
+
+    static constexpr bool kUseIndex = IndexTraits<T>::enabled;
 
 public:
+    void append(const T* md) {
 
-    explicit MappedFileWriter(const std::string& filePath, size_t initialSize = 1024 * 1024)
-        : m_filePath(filePath) {
+        if (!m_running) return;
+        md->retainAlive();
 
-        m_contextPtr = ContextService::getInstance().createContext("MappedFileWriter", 1);
+        auto task = [this, self = this->shared_from_this(), md]() {
+            if (!m_running) return;
 
-        m_file.open(filePath, std::ios::binary | std::ios::in | std::ios::out | std::ios::ate);
+            if (m_header->size >= m_header->capacity) {
+                growFile();
+            }
 
-        if (not m_file.is_open()) {
-            SPDLOG_INFO("Create map File:{}", filePath);
-            m_file.open(filePath, std::ios::binary | std::ios::out);
-            initializeNewFile(initialSize);
-        }
-        else {
+            size_t i = m_header->size;
 
-            loadExistingFile();
-        }
+            memcpy(&m_data[i], md, sizeof(T));
 
-        mapFile();
+            if constexpr (kUseIndex) {
+                auto entry = IndexEntryT::create(md, i * sizeof(T));
+                m_index[i] = entry;
 
-        SPDLOG_INFO("map File:{},recorde count:{},fileSize:{},updateTime:{}", filePath, m_header->recordCount, m_header->fileSize, m_header->lastUpdateTime);
-        
-        m_running = true;
+                uint32_t indexKey = IndexEntryT::getIndexKey_1(entry);
+                m_indexKeyPositionMap[indexKey].push_back(i);
+            }
+
+            m_header->size++;
+            md->release();
+            };
+
+        asio::post(*m_contextPtr, task);
     }
 
-    MappedFileWriter(const MappedFileWriter&) = delete;
-    MappedFileWriter& operator=(const MappedFileWriter&) = delete;
+private:
+
+    MappedFileWriter(const std::string& fileFullName, size_t initialCapacity = 1024 * 1024)
+        : m_fileFullName(fileFullName)
+        , m_initCapacity(initialCapacity) {
+
+        m_contextPtr = ContextService::getInstance().createContext("MappedFileWriter", 1);
+        open(true, true);
+
+    }
 
     ~MappedFileWriter() {
 
         m_running = false;
 
-        if (m_mappedRegion) {
-            m_mappedRegion->flush();
+        if (m_mappedRegion) m_mappedRegion->flush();
+
+        if (m_file.is_open()) m_file.close();
+
+        m_mappedRegion.reset();
+        m_fileMapping.reset();
+    }
+
+    void createFile(size_t cap) {
+
+        size_t fileSize = calculateFileSize(cap);
+
+        m_file.open(m_fileFullName, std::ios::binary | std::ios::out);
+        m_file.seekp(fileSize - 1);
+        m_file.put('\0');
+        m_file.seekp(0);
+
+        MappedFileHeader header{ .capacity = cap };
+
+        m_file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+        m_file.close();
+
+        SPDLOG_INFO("create File:{},capacity {},fileSize:{}", m_fileFullName, cap, fileSize);
+    }
+
+    bool open(bool writable = true, bool rebuildIndex = true) {
+
+        bool exists = std::filesystem::exists(m_fileFullName);
+
+        if (!exists && writable) {
+            createFile(m_initCapacity);
         }
 
-        if (m_file.is_open()) {
-            m_file.close();
+        m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), writable ? bip::read_write : bip::read_only);
+        m_mappedRegion = std::make_unique<bip::mapped_region>(*m_fileMapping, writable ? bip::read_write : bip::read_only);
+
+        auto base = static_cast<char*>(m_mappedRegion->get_address());
+
+        m_header = reinterpret_cast<MappedFileHeader*>(base);
+
+        m_data = reinterpret_cast<T*>(base + sizeof(MappedFileHeader));
+
+        if constexpr (kUseIndex) {
+            m_index = reinterpret_cast<IndexEntryT*>(base + sizeof(MappedFileHeader) + sizeof(T) * m_header->capacity);
         }
 
-        if(m_mappedRegion)
-            m_mappedRegion.reset();
-        if(m_fileMapping)
-            m_fileMapping.reset();
+        if (rebuildIndex && kUseIndex) rebuildIndexMap();
 
+        SPDLOG_DEBUG("open File:{},size:{},capacity:{},fileSize:{}", m_fileFullName, m_header->size, m_header->capacity, std::filesystem::file_size(m_fileFullName));
+
+        m_running = true;
+
+        return true;
     }
 
-    void stop() {
+    void growFile() {
 
-        m_running = false;
-    }
+        if (m_mappedRegion) m_mappedRegion->flush();
 
-    bool hasNoReaders() {
-        if (m_header) {
-            return m_header->readers.load() == 0;
+        size_t oldCapacity = m_header->capacity;
+        size_t newCapacity = oldCapacity * 2;
+        size_t newFileSize = calculateFileSize(newCapacity);
+
+        m_mappedRegion.reset();
+        m_fileMapping.reset();
+
+        m_file.open(m_fileFullName, std::ios::binary | std::ios::in | std::ios::out);
+        m_file.seekp(newFileSize - 1);
+        m_file.put('\0');
+        m_file.close();
+
+        open(true, false);
+
+        if constexpr (kUseIndex) {
+
+            void* oldIndexStart = reinterpret_cast<char*>(m_index);
+            size_t oldIndexSize = sizeof(IndexEntryT) * oldCapacity;
+
+            IndexEntryT* newIndex = reinterpret_cast<IndexEntryT*>(reinterpret_cast<char*>(m_header) + sizeof(MappedFileHeader) + sizeof(T) * newCapacity);
+            std::memcpy(newIndex, oldIndexStart, oldIndexSize);
+            m_index = newIndex;
         }
-        return false;
-    }
 
-    std::string getFilePath() {
-        return m_filePath;
-    }
+        m_header->capacity = newCapacity;
 
-    void appendMarketDepth(const T* depth) {
-
-        if (not m_running) return;
-
-        depth->retainAlive();
-
-        auto task = [this, self=this->shared_from_this(), depth]() {
-
-            if (not m_running) return;
-
-            if ((m_header->recordCount + 1) * sizeof(T) + sizeof(MappedFileHeader) >= m_header->fileSize) {
-                growFile();
-            }
-
-            T* record = reinterpret_cast<T*>(reinterpret_cast<char*>(m_header)
-                + sizeof(MappedFileHeader)
-                + m_header->recordCount * sizeof(T));
-
-            memcpy(record, depth, sizeof(T));
-
-            depth->release();
-
-            m_header->recordCount++;
-            m_header->lastUpdateTime = std::time(nullptr);
-        };
-
-        asio::post(*m_contextPtr, task);
+        SPDLOG_INFO("grow File:{},capacity from:{} to:{},newFileSize:{}", m_fileFullName, oldCapacity, newCapacity, newFileSize);
     }
 
     void shrinkFile() {
 
-        if (!m_header) return;
-        if (m_running) return;
+        if (!m_header || m_running) return;
+        if (not hasNoReaders()) return;
 
-        size_t actualSize = sizeof(MappedFileHeader) + m_header->recordCount * sizeof(T);
-        size_t fileSize = (size_t)std::filesystem::file_size(m_filePath);
+        size_t newFileSize = calculateFileSize(m_header->size);
 
-        if (actualSize < fileSize) {
+        size_t oldFileSize = std::filesystem::file_size(m_fileFullName);
 
-            SPDLOG_INFO("resizing file: {},from headerSize {}[{}] to actualSize {}", m_filePath, m_header->fileSize, fileSize, actualSize);
+        if (m_header->size < m_header->capacity) {
+            m_header->capacity = m_header->size;
+
+            if constexpr (kUseIndex) {
+                char* newIndexAddr = reinterpret_cast<char*>(m_data) + m_header->size * sizeof(T);
+                std::memcpy(newIndexAddr, m_index, m_header->size * sizeof(IndexEntryT));
+            }
+
+            SPDLOG_INFO("try resize file:{},from size:{},capcity:{},oldFileSize:{} to newFileSize:{}", m_fileFullName
+                , m_header->size
+                , m_header->capacity
+                , oldFileSize
+                , newFileSize);
 
             m_mappedRegion.reset();
             m_fileMapping.reset();
 
             std::error_code ec;
-            std::filesystem::resize_file(m_filePath, actualSize, ec);
+            std::filesystem::resize_file(m_fileFullName, newFileSize, ec);
             if (ec) {
-                SPDLOG_ERROR("{}", ec.message());
+                SPDLOG_ERROR("shrinkFile error: {}", ec.message());
             }
             else {
-
-                mapFile();
-                m_header->fileSize = actualSize;
+                SPDLOG_INFO("resize file:{} done", m_fileFullName);
             }
         }
     }
 
+    void rebuildIndexMap() {
+
+        m_indexKeyPositionMap.clear();
+        for (size_t i = 0; i < m_header->size; ++i) {
+            uint32_t indexKey = IndexEntryT::getIndexKey_1(m_index[i]);
+            m_indexKeyPositionMap[indexKey].push_back(i);
+        }
+    }
+
+    size_t calculateFileSize(size_t cap) {
+        return sizeof(MappedFileHeader) + sizeof(T) * cap + (kUseIndex ? sizeof(IndexEntryT) * cap : 0);
+    }
+
+    inline void stop() { m_running = false; }
+
+    inline bool hasNoReaders() { return m_header && m_header->readers.load() == 0; }
+
+    inline std::string getFilePath() { return m_fileFullName; }
+
 private:
-    void initializeNewFile(size_t initialSize) {
 
-        m_file.seekp(initialSize - 1);
-        m_file.put('\0');
-        m_file.seekp(0);
+    std::string         m_fileFullName;
 
-        MappedFileHeader header;
+    size_t              m_initCapacity;
 
-        header.createTime       = std::time(nullptr);
-        header.lastUpdateTime   = header.createTime;
-        header.fileSize         = initialSize;
+    AsioContextPtr      m_contextPtr = nullptr;
 
-        m_file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    std::atomic<bool>   m_running    = false;
 
-    }
+    std::fstream        m_file{};
 
-    void loadExistingFile() {
-
-        m_file.seekg(0, std::ios::end);
-
-        std::size_t loadFileSize = (size_t)std::filesystem::file_size(m_filePath);
-
-        m_file.seekg(0);
-
-        MappedFileHeader header;
-        m_file.read(reinterpret_cast<char*>(&header), sizeof(header));
-
-        SPDLOG_INFO("load File:{},header fileSize:{},loadFileSize:{}", m_filePath, header.fileSize, loadFileSize);
-
-        header.fileSize = loadFileSize;
-
-        if (header.magicNumber != 0x4D445354) {
-            throw std::runtime_error("Invalid market data file format");
-        }
-    }
-
-    void mapFile() {
-
-        m_file.close();
-
-        m_fileMapping = std::make_unique<bip::file_mapping>(m_filePath.c_str(), bip::read_write);
-
-        m_mappedRegion = std::make_unique<bip::mapped_region>(*m_fileMapping, bip::read_write);
-
-        m_header = reinterpret_cast<MappedFileHeader*>(m_mappedRegion->get_address());
-    }
-
-    void growFile() {
-
-        if (m_mappedRegion) {
-            m_mappedRegion->flush();
-        }
-        auto lastSize = m_header->fileSize;
-        size_t newSize = lastSize * 2;
-
-        m_mappedRegion.reset();
-        m_fileMapping.reset();
-
-        m_file.open(m_filePath, std::ios::binary | std::ios::in | std::ios::out);
-        m_file.seekp(newSize - 1);
-        m_file.put('\0');
-
-        mapFile();
-
-        m_header->fileSize = newSize;
-        SPDLOG_INFO("grow File:{} from:{},to:{}", m_filePath, lastSize, newSize);
-    }
-
-    std::string  m_filePath;
-
-    std::fstream m_file;
-
-    std::unique_ptr<bip::file_mapping> m_fileMapping;
-
+    std::unique_ptr<bip::file_mapping>  m_fileMapping;
     std::unique_ptr<bip::mapped_region> m_mappedRegion;
 
-    MappedFileHeader*       m_header = nullptr;
+    MappedFileHeader*   m_header = nullptr;
+    T*                  m_data   = nullptr;
+    IndexEntryT*        m_index = nullptr;
 
-    AsioContextPtr          m_contextPtr{ nullptr };
+    std::unordered_map<uint32_t, std::vector<size_t>> m_indexKeyPositionMap;
+};
 
-    std::atomic<bool>       m_running{false};
+#pragma pack(push, 1) 
+struct MarketDepthIndex {
 
+    uint32_t    symbol;
+    time_t      timestamp;
+    uint64_t    offset;
+
+    static MarketDepthIndex create(const MarketDepth* md, size_t offset) {
+        return MarketDepthIndex{
+            .symbol = md->symbolIntFormat(),
+            .timestamp = agcommon::to_timestamp(md->quoteTime),
+            .offset = offset
+        };
+    }
+    static uint32_t getIndexKey_1(const MarketDepthIndex& entry) {
+        return entry.symbol;
+    }
+};
+#pragma pack(pop)
+
+template<>
+struct IndexTraits<MarketDepth> {
+
+    using IndexType = MarketDepthIndex;
+    static constexpr bool enabled = true;
 };

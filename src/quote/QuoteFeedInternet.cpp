@@ -301,7 +301,7 @@ void QuoteFeedInternet::onMarketDepth(std::shared_ptr<std::vector<MarketDepth*>>
         ConceptQuote::getInstance().onMarketDepth(md);
 
         if (m_mdWriter) {
-            m_mdWriter->appendMarketDepth(md);
+            m_mdWriter->append(md);
         }
     }
 

@@ -13,7 +13,7 @@ MarketDepth::MarketDepth(const Symbol_t& symbol_, const OrderTime_t& quoteTime )
 
 MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ) {
 
-    exchange = (agcommon::MarketExchange)tick->exchange;
+    exchange = (agcommon::MarketExchange)(tick->exchange);
 
     _symbol = tick->symbol;
 

@@ -18,8 +18,6 @@ void QuoteFeedReplay::stop() {
 
     m_keepRuning = false;
 
-    
-
     asio::post(m_strand, [self = keep_alive_this<QuoteFeedReplay>()]() {
         SPDLOG_INFO("[aId:{}]QuoteFeedReplay on finish,size:{}", self->m_request.algoOrderId, self->onQuoteFeedFinisheds.size());
 
@@ -60,7 +58,7 @@ uint64_t QuoteFeedReplay::_subscribe(std::shared_ptr<SubMarketDepth_t> subPtr) {
 
     auto [it, isinserted] = m_subscribeKey2SymbolCallBack.insert({ subPtr->subscribeKey,subPtr });
     if (isinserted) {
-        for (auto& symbol : subPtr->symbols) {
+        for (const auto& symbol : subPtr->symbols) {
             m_symbol2SubscribeCallBack[symbol].insert({ subPtr->subscribeKey,subPtr });
         }
         SPDLOG_DEBUG("[aId:{}]subscribe symbol count:{}", subPtr->subscribeKey, subPtr->symbols.size());
@@ -113,10 +111,12 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
     if (m_keepRuning)
         co_return;
 
+    auto m_mdWriter = MappedFileManager<MarketDepth>::createWriter(std::format("./md_TEST.bin"));
+
     m_keepRuning = true;
     int i = 0;
     if (m_quoteTime2Symbol2md.size() > 0) {
-        SPDLOG_INFO("aid:{} Replay start,{},{}", m_request.algoOrderId
+        SPDLOG_INFO("[aid:{}]Replay start,{},{}", m_request.algoOrderId
             , agcommon::getDateTimeInt(m_quoteTime2Symbol2md.begin()->first)
             , agcommon::getDateTimeInt(m_quoteTime2Symbol2md.rbegin()->first));
     }
@@ -177,13 +177,17 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
                     }
                 }
             }
+            
+            if (m_mdWriter) {
+                m_mdWriter->append(md);
+            }
             md->release();
         }
     
         #if ENABLE_DELAY_STATS
             statDelay<QuoteFeedReplay>(delay);
         #endif // ENABLE_DELAY_TEST
-
+        
     }
 
     for (const auto& [symbol, md] : m_symbol2md) {

@@ -33,11 +33,13 @@ public:
 
     MarketDepth& operator=(const MarketDepth&);
 
-    MarketDepth(const Symbol_t& _symbol,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
+    MarketDepth(const Symbol_t& symbolStr,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
 
     MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ = 0);
 
     inline Symbol_t symbol() const { return fmt::format("{:06}.{}", _symbol, agcommon::getMarketExchangeStrCode(exchange)); };
+
+    inline uint32_t symbolIntFormat() const { return (uint32_t)exchange * 10000000 + _symbol; };
 
     std::vector<std::pair<double,int>> getAskQuotes() const;
 
@@ -56,13 +58,7 @@ public:
     }
 
     inline agcommon::MarketExchange getMarketExchange() const { 
-        //if (symbol.ends_with("SZ"))
-        //    return agcommon::MarketExchange::SZSE;
-        //if (symbol.ends_with("SH"))
-        //    return agcommon::MarketExchange::SHSE;
-        //if (symbol.ends_with("BJ"))
-        //    return agcommon::MarketExchange::BJSE;
-        //return agcommon::MarketExchange::unDefined;
+
         return exchange;
     }
 
