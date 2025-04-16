@@ -51,7 +51,7 @@ private:
 
     MappedFileWriter(const std::string& fileFullName, size_t initialCapacity = 1024 * 1024, size_t cacheQueueSize = 1024)
         : m_fileFullName(fileFullName)
-        , m_capacity(initialCapacity)
+        , m_currentCapacity(initialCapacity)
         , m_queue(cacheQueueSize) {
     }
 
@@ -79,7 +79,7 @@ private:
         m_file.put('\0');
         m_file.seekp(0);
 
-        MappedFileHeader header{ .capacity = cap };
+        MappedFileHeader header{ .size=0,.capacity = cap };
 
         m_file.write(reinterpret_cast<const char*>(&header), sizeof(header));
         m_file.flush();
@@ -92,17 +92,26 @@ private:
         bool exists = std::filesystem::exists(m_fileFullName);
 
         if (!exists) {
-            createFile(m_capacity);
+            createFile(m_currentCapacity);
+        }
+        else {
+            if (std::filesystem::file_size(m_fileFullName) < sizeof(MappedFileHeader)) {
+                std::filesystem::remove(m_fileFullName);
+                return init();
+            }
+            m_file.open(m_fileFullName, std::ios::in | std::ios::out);
         }
 
         m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), bip::read_write );
 
-        remapFile(0, m_capacity);
+        remapFile(0, m_currentCapacity,true);
 
         if constexpr (useIndex) {
-            buildIndexMap();
-            
+            buildIndexMap(); 
         }
+
+        m_currentSize  = m_header->size;
+        m_currentCapacity     = m_header->capacity;
 
         SPDLOG_INFO("open File:{},size:{},capacity:{},fileSize:{}"
             , m_fileFullName
@@ -119,7 +128,7 @@ private:
         return true;
     }
 
-    void remapFile(size_t oldCapacity,size_t newCapacity) {
+    void remapFile(size_t oldCapacity,size_t newCapacity,bool isfirstMap = false) {
 
         //agcommon::TimeCost tc("remap file");
 
@@ -132,6 +141,9 @@ private:
         m_data = reinterpret_cast<T*>(base + sizeof(MappedFileHeader));
 
         if constexpr (useIndex) {
+
+            newCapacity = isfirstMap ? m_header->capacity.load() : newCapacity;
+            
             m_index = reinterpret_cast<IndexEntryT*>(base + sizeof(MappedFileHeader) + sizeof(T) * newCapacity);
 
             if (oldCapacity > 0) {
@@ -151,7 +163,7 @@ private:
         // grow file may cost seconds for xG data, better pregrow async or pre reserve enough capacity 
 
         auto startTime = std::chrono::steady_clock::now();
-        size_t oldCapacity = m_header->capacity.load(std::memory_order_relaxed);
+        size_t oldCapacity = m_currentCapacity;
         size_t newCapacity = oldCapacity * 2;
         size_t newFileSize = calculateFileSize(newCapacity);
 
@@ -161,13 +173,13 @@ private:
             m_file.seekp(newFileSize - 1);
             m_file.put('\0');
             m_file.flush();
-            SPDLOG_INFO("remap fileSize:{}",std::filesystem::file_size(m_fileFullName));
+            SPDLOG_INFO("{} grow to fileSize:{}", m_fileFullName,std::filesystem::file_size(m_fileFullName));
         }
         
         remapFile(oldCapacity,newCapacity);
 
-        m_capacity = newCapacity;
-        m_header->capacity.store(m_capacity, std::memory_order_release);
+        m_currentCapacity = newCapacity;
+        m_header->capacity.store(m_currentCapacity, std::memory_order_release);
         
         auto costTime = (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-startTime)).count();
         SPDLOG_INFO("grow File:{},capacity from:{} to:{},newFileSize:{},costTime:{}ms", m_fileFullName, oldCapacity, newCapacity, newFileSize, costTime);
@@ -257,13 +269,13 @@ private:
 
         size_t count = m_queue.try_dequeue_bulk(ctok, buffer.begin(), batchSize);
 
-        size_t currentItemSize = m_size;
+        size_t currentItemSize = m_currentSize;
 
         for (size_t i = 0; i < count; i++) {
 
             auto rawPtr = buffer[i].get();
 
-            if (currentItemSize >= m_capacity) {
+            if (currentItemSize >= m_currentCapacity) {
                 growFile();
             }
 
@@ -281,38 +293,38 @@ private:
 
         }
 
-        m_size = m_size + count;
+        m_currentSize = m_currentSize + count;
 
-        m_header->size.store(m_size, std::memory_order_release);
+        m_header->size.store(m_currentSize, std::memory_order_release);
     }
 
     void _append(const T* ptr) {
 
-        if (m_size >= m_capacity) {
+        if (m_currentSize >= m_currentCapacity) {
             growFile();
         }
 
-        memcpy(&m_data[m_size], ptr, sizeof(T));
+        memcpy(&m_data[m_currentSize], ptr, sizeof(T));
 
         if constexpr (useIndex) {
-            auto entry = IndexEntryT::getIndex(ptr, m_size);
-            m_index[m_size] = entry;
+            auto entry = IndexEntryT::getIndex(ptr, m_currentSize);
+            m_index[m_currentSize] = entry;
 
             IndexEntryKeyT indexKey = IndexEntryT::getIndexKey_1(entry);
-            m_indexKeyPositionMap[indexKey].push_back(m_size);
+            m_indexKeyPositionMap[indexKey].push_back(m_currentSize);
         }
 
-        m_size++;
-        m_header->size.store(m_size, std::memory_order_release);
+        m_currentSize++;
+        m_header->size.store(m_currentSize, std::memory_order_release);
     }
 
 private:
 
     std::string         m_fileFullName;
 
-    size_t              m_capacity;
+    size_t              m_currentCapacity;
 
-    size_t              m_size = 0;
+    size_t              m_currentSize = 0;
 
     std::atomic<bool>   m_running    = false;
 
