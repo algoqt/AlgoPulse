@@ -31,7 +31,7 @@ message(status ${DEPENDENT_LIBS})
 
 find_package(ZLIB REQUIRED)
 
-find_package(Boost COMPONENTS REQUIRED coroutine context system )
+find_package(Boost COMPONENTS REQUIRED coroutine context system)
 
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
@@ -129,6 +129,4 @@ install(DIRECTORY
     DESTINATION .
 )
 
-#add_executable(mdReader mdreader.cpp ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES})
-#target_link_libraries(mdReader Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
-#add_subdirs_to_target_include_directories(mdReader ${PROJECT_SOURCE_DIR})
+#add_subdirectory(test)

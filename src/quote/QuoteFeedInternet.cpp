@@ -27,9 +27,9 @@ void QuoteFeedInternet::stop() {
 
     asio::post(m_strand, [self]() {
 
-        for (auto& [onRepalyFinished,contextPtr] : self->onQuoteFeedFinisheds) {
-            if(contextPtr)
-                asio::dispatch(*contextPtr,onRepalyFinished);
+        for (auto& [onRepalyFinished, contextPtr] : self->onQuoteFeedFinisheds) {
+            if (contextPtr)
+                asio::dispatch(*contextPtr, onRepalyFinished);
         }
 
         self->m_orderBookKey2CallBack.clear();
@@ -46,8 +46,9 @@ void QuoteFeedInternet::stop() {
 
         self->m_batchSymbolString2Fetch.clear();
 
-        }
-    );
+        self->m_mdWriter.reset();
+
+     });
 
 }
 

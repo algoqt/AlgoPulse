@@ -1,32 +1,16 @@
 #pragma once
 
 #include <fstream> 
-#include "MarketDepth.h"
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include "ContextService.h"
 #include <boost/filesystem.hpp>
+#include "concurrentqueue.h"
+#include "MapppeFileIndexTraits.h"
 
 namespace bip = boost::interprocess;
 
-#pragma pack(push, 1) // 确保紧密内存布局
-struct MappedFileHeader {
-    uint32_t version = 1;
-    uint64_t size = 0;
-    uint64_t capacity = 0;
-    std::atomic<uint32_t>   readers = 0;
-};
-
-#pragma pack(pop)
-
-struct EmptyIndexEntry {};
-
-template<typename T>
-struct IndexTraits {
-    using IndexType = EmptyIndexEntry;
-    static constexpr bool enabled = false;
-};
 
 template<typename T>
 class MappedFileManager;
@@ -36,56 +20,44 @@ class MappedFileWriter : public std::enable_shared_from_this<MappedFileWriter<T>
 
     friend class MappedFileManager<T>;
 
-    using IndexEntryT = typename IndexTraits<T>::IndexType;
+    using IndexEntryT    = typename MapppeFileIndexTraits<T>::IndexType;
 
-    static constexpr bool kUseIndex = IndexTraits<T>::enabled;
+    using IndexEntryKeyT = typename MapppeFileIndexTraits<T>::IndexKeyType;
+
+    static constexpr bool useIndex = MapppeFileIndexTraits<T>::enabled;
 
 public:
-    void append(const T* md) {
+
+    void append(const T* mdPtr) {
 
         if (!m_running) return;
-        md->retainAlive();
 
-        auto task = [this, self = this->shared_from_this(), md]() {
-            if (!m_running) return;
+        // 1: fastest,just call function
+        // _append(mdPtr);
 
-            if (m_header->size >= m_header->capacity) {
-                growFile();
-            }
+        // 2: queue to sink
+        static moodycamel::ProducerToken ptok(m_queue);
+        m_queue.enqueue(ptok,boost::intrusive_ptr(mdPtr));
+        
+        // 3: asio post
+        //asio::post(*m_runContext, [this, instrPtr = boost::intrusive_ptr(mdPtr)]() { _append(instrPtr.get()); });
 
-            size_t i = m_header->size;
-
-            memcpy(&m_data[i], md, sizeof(T));
-
-            if constexpr (kUseIndex) {
-                auto entry = IndexEntryT::create(md, i * sizeof(T));
-                m_index[i] = entry;
-
-                uint32_t indexKey = IndexEntryT::getIndexKey_1(entry);
-                m_indexKeyPositionMap[indexKey].push_back(i);
-            }
-
-            m_header->size++;
-            md->release();
-            };
-
-        asio::post(*m_contextPtr, task);
     }
 
+    size_t recordSize() const {
+        return m_header ? m_header->size.load(std::memory_order_acquire) : 0;
+    }
 private:
 
-    MappedFileWriter(const std::string& fileFullName, size_t initialCapacity = 1024 * 1024)
+    MappedFileWriter(const std::string& fileFullName, size_t initialCapacity = 1024 * 1024, size_t cacheQueueSize = 1024)
         : m_fileFullName(fileFullName)
-        , m_initCapacity(initialCapacity) {
-
-        m_contextPtr = ContextService::getInstance().createContext("MappedFileWriter", 1);
-        open(true, true);
-
+        , m_capacity(initialCapacity)
+        , m_queue(cacheQueueSize) {
     }
 
     ~MappedFileWriter() {
 
-        m_running = false;
+        stop();
 
         if (m_mappedRegion) m_mappedRegion->flush();
 
@@ -93,6 +65,9 @@ private:
 
         m_mappedRegion.reset();
         m_fileMapping.reset();
+
+        ContextService::getInstance().stopContext(typeid(T).name());
+
     }
 
     void createFile(size_t cap) {
@@ -107,72 +82,96 @@ private:
         MappedFileHeader header{ .capacity = cap };
 
         m_file.write(reinterpret_cast<const char*>(&header), sizeof(header));
-        m_file.close();
+        m_file.flush();
 
         SPDLOG_INFO("create File:{},capacity {},fileSize:{}", m_fileFullName, cap, fileSize);
     }
 
-    bool open(bool writable = true, bool rebuildIndex = true) {
+    bool init() {
 
         bool exists = std::filesystem::exists(m_fileFullName);
 
-        if (!exists && writable) {
-            createFile(m_initCapacity);
+        if (!exists) {
+            createFile(m_capacity);
         }
 
-        m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), writable ? bip::read_write : bip::read_only);
-        m_mappedRegion = std::make_unique<bip::mapped_region>(*m_fileMapping, writable ? bip::read_write : bip::read_only);
+        m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), bip::read_write );
 
-        auto base = static_cast<char*>(m_mappedRegion->get_address());
+        remapFile(0, m_capacity);
+
+        if constexpr (useIndex) {
+            buildIndexMap();
+            
+        }
+
+        SPDLOG_INFO("open File:{},size:{},capacity:{},fileSize:{}"
+            , m_fileFullName
+            , m_header->size.load()
+            , m_header->capacity.load()
+            , std::filesystem::file_size(m_fileFullName));
+
+        m_runContext = ContextService::getInstance().createContext(typeid(T).name(), 1);
+
+        m_running = true;
+
+        asio::post(*m_runContext, [this]() { sink();  }); // dont't need this->shared_from_this(), see MappedFileManager::createWriter
+
+        return true;
+    }
+
+    void remapFile(size_t oldCapacity,size_t newCapacity) {
+
+        //agcommon::TimeCost tc("remap file");
+
+        auto new_mappedRegion = std::make_unique<bip::mapped_region>(*m_fileMapping, bip::read_write);
+
+        auto base = static_cast<char*>(new_mappedRegion->get_address());
 
         m_header = reinterpret_cast<MappedFileHeader*>(base);
 
         m_data = reinterpret_cast<T*>(base + sizeof(MappedFileHeader));
 
-        if constexpr (kUseIndex) {
-            m_index = reinterpret_cast<IndexEntryT*>(base + sizeof(MappedFileHeader) + sizeof(T) * m_header->capacity);
+        if constexpr (useIndex) {
+            m_index = reinterpret_cast<IndexEntryT*>(base + sizeof(MappedFileHeader) + sizeof(T) * newCapacity);
+
+            if (oldCapacity > 0) {
+                //agcommon::TimeCost tc("move index");
+
+                void* oldIndexStart = reinterpret_cast<IndexEntryT*>(reinterpret_cast<char*>(m_data) + sizeof(T) * oldCapacity);
+                size_t oldIndexSize = sizeof(IndexEntryT) * oldCapacity;
+
+                std::memcpy(m_index, oldIndexStart, oldIndexSize);
+            }
         }
-
-        if (rebuildIndex && kUseIndex) rebuildIndexMap();
-
-        SPDLOG_DEBUG("open File:{},size:{},capacity:{},fileSize:{}", m_fileFullName, m_header->size, m_header->capacity, std::filesystem::file_size(m_fileFullName));
-
-        m_running = true;
-
-        return true;
+        m_mappedRegion.swap(new_mappedRegion);
     }
-
+    
     void growFile() {
+        
+        // grow file may cost seconds for xG data, better pregrow async or pre reserve enough capacity 
 
-        if (m_mappedRegion) m_mappedRegion->flush();
-
-        size_t oldCapacity = m_header->capacity;
+        auto startTime = std::chrono::steady_clock::now();
+        size_t oldCapacity = m_header->capacity.load(std::memory_order_relaxed);
         size_t newCapacity = oldCapacity * 2;
         size_t newFileSize = calculateFileSize(newCapacity);
 
-        m_mappedRegion.reset();
-        m_fileMapping.reset();
-
-        m_file.open(m_fileFullName, std::ios::binary | std::ios::in | std::ios::out);
-        m_file.seekp(newFileSize - 1);
-        m_file.put('\0');
-        m_file.close();
-
-        open(true, false);
-
-        if constexpr (kUseIndex) {
-
-            void* oldIndexStart = reinterpret_cast<char*>(m_index);
-            size_t oldIndexSize = sizeof(IndexEntryT) * oldCapacity;
-
-            IndexEntryT* newIndex = reinterpret_cast<IndexEntryT*>(reinterpret_cast<char*>(m_header) + sizeof(MappedFileHeader) + sizeof(T) * newCapacity);
-            std::memcpy(newIndex, oldIndexStart, oldIndexSize);
-            m_index = newIndex;
+        {
+            //agcommon::TimeCost tc("seekp file");
+            m_file.seekp(0, std::ios::end);
+            m_file.seekp(newFileSize - 1);
+            m_file.put('\0');
+            m_file.flush();
+            SPDLOG_INFO("remap fileSize:{}",std::filesystem::file_size(m_fileFullName));
         }
+        
+        remapFile(oldCapacity,newCapacity);
 
-        m_header->capacity = newCapacity;
+        m_capacity = newCapacity;
+        m_header->capacity.store(m_capacity, std::memory_order_release);
+        
+        auto costTime = (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-startTime)).count();
+        SPDLOG_INFO("grow File:{},capacity from:{} to:{},newFileSize:{},costTime:{}ms", m_fileFullName, oldCapacity, newCapacity, newFileSize, costTime);
 
-        SPDLOG_INFO("grow File:{},capacity from:{} to:{},newFileSize:{}", m_fileFullName, oldCapacity, newCapacity, newFileSize);
     }
 
     void shrinkFile() {
@@ -184,17 +183,17 @@ private:
 
         size_t oldFileSize = std::filesystem::file_size(m_fileFullName);
 
-        if (m_header->size < m_header->capacity) {
-            m_header->capacity = m_header->size;
+        if (m_header->size.load() < m_header->capacity.load()) {
+            m_header->capacity.store(m_header->size,std::memory_order_release);
 
-            if constexpr (kUseIndex) {
+            if constexpr (useIndex) {
                 char* newIndexAddr = reinterpret_cast<char*>(m_data) + m_header->size * sizeof(T);
                 std::memcpy(newIndexAddr, m_index, m_header->size * sizeof(IndexEntryT));
             }
 
             SPDLOG_INFO("try resize file:{},from size:{},capcity:{},oldFileSize:{} to newFileSize:{}", m_fileFullName
-                , m_header->size
-                , m_header->capacity
+                , m_header->size.load()
+                , m_header->capacity.load()
                 , oldFileSize
                 , newFileSize);
 
@@ -212,32 +211,108 @@ private:
         }
     }
 
-    void rebuildIndexMap() {
+    void buildIndexMap() {
 
         m_indexKeyPositionMap.clear();
+        m_indexKeyPositionMap.reserve(m_header->size);
         for (size_t i = 0; i < m_header->size; ++i) {
-            uint32_t indexKey = IndexEntryT::getIndexKey_1(m_index[i]);
+            IndexEntryKeyT indexKey = IndexEntryT::getIndexKey_1(m_index[i]);
             m_indexKeyPositionMap[indexKey].push_back(i);
         }
     }
 
     size_t calculateFileSize(size_t cap) {
-        return sizeof(MappedFileHeader) + sizeof(T) * cap + (kUseIndex ? sizeof(IndexEntryT) * cap : 0);
+        return sizeof(MappedFileHeader) + sizeof(T) * cap + (useIndex ? sizeof(IndexEntryT) * cap : 0);
     }
 
-    inline void stop() { m_running = false; }
+    inline void stop() { m_running.store(false); }
 
     inline bool hasNoReaders() { return m_header && m_header->readers.load() == 0; }
 
     inline std::string getFilePath() { return m_fileFullName; }
 
+    void sink() {
+        constexpr int BatchSize = 128;
+
+        static moodycamel::ConsumerToken ctok(m_queue);
+
+        std::vector<boost::intrusive_ptr<const T>> ptrBuffer(BatchSize);
+
+        boost::intrusive_ptr<const T> instrusivPtr;
+
+        while (m_running.load()) {
+            // batch mode
+            //_appendBatch(ctok, ptrBuffer, BatchSize);
+
+            // single mode
+            if (m_queue.try_dequeue(ctok,instrusivPtr)) {
+                _append(instrusivPtr.get());
+            }
+        }
+
+        SPDLOG_INFO("Mapped file sink stopped");
+    }
+
+    void _appendBatch(moodycamel::ConsumerToken& ctok,std::vector<boost::intrusive_ptr<const T>>& buffer,size_t batchSize) {
+
+        size_t count = m_queue.try_dequeue_bulk(ctok, buffer.begin(), batchSize);
+
+        size_t currentItemSize = m_size;
+
+        for (size_t i = 0; i < count; i++) {
+
+            auto rawPtr = buffer[i].get();
+
+            if (currentItemSize >= m_capacity) {
+                growFile();
+            }
+
+            memcpy(&m_data[currentItemSize], rawPtr, sizeof(T));
+
+            if constexpr (useIndex) {
+                auto entry = IndexEntryT::getIndex(rawPtr, currentItemSize);
+                m_index[i] = entry;
+
+                IndexEntryKeyT indexKey = IndexEntryT::getIndexKey_1(entry);
+                m_indexKeyPositionMap[indexKey].push_back(currentItemSize);
+            }
+
+            currentItemSize++;
+
+        }
+
+        m_size = m_size + count;
+
+        m_header->size.store(m_size, std::memory_order_release);
+    }
+
+    void _append(const T* ptr) {
+
+        if (m_size >= m_capacity) {
+            growFile();
+        }
+
+        memcpy(&m_data[m_size], ptr, sizeof(T));
+
+        if constexpr (useIndex) {
+            auto entry = IndexEntryT::getIndex(ptr, m_size);
+            m_index[m_size] = entry;
+
+            IndexEntryKeyT indexKey = IndexEntryT::getIndexKey_1(entry);
+            m_indexKeyPositionMap[indexKey].push_back(m_size);
+        }
+
+        m_size++;
+        m_header->size.store(m_size, std::memory_order_release);
+    }
+
 private:
 
     std::string         m_fileFullName;
 
-    size_t              m_initCapacity;
+    size_t              m_capacity;
 
-    AsioContextPtr      m_contextPtr = nullptr;
+    size_t              m_size = 0;
 
     std::atomic<bool>   m_running    = false;
 
@@ -248,34 +323,11 @@ private:
 
     MappedFileHeader*   m_header = nullptr;
     T*                  m_data   = nullptr;
-    IndexEntryT*        m_index = nullptr;
+    IndexEntryT*        m_index  = nullptr;
 
-    std::unordered_map<uint32_t, std::vector<size_t>> m_indexKeyPositionMap;
-};
+    AsioContextPtr     m_runContext = nullptr;
 
-#pragma pack(push, 1) 
-struct MarketDepthIndex {
+    std::unordered_map<IndexEntryKeyT, std::vector<size_t>> m_indexKeyPositionMap;
 
-    uint32_t    symbol;
-    time_t      timestamp;
-    uint64_t    offset;
-
-    static MarketDepthIndex create(const MarketDepth* md, size_t offset) {
-        return MarketDepthIndex{
-            .symbol = md->symbolIntFormat(),
-            .timestamp = agcommon::to_timestamp(md->quoteTime),
-            .offset = offset
-        };
-    }
-    static uint32_t getIndexKey_1(const MarketDepthIndex& entry) {
-        return entry.symbol;
-    }
-};
-#pragma pack(pop)
-
-template<>
-struct IndexTraits<MarketDepth> {
-
-    using IndexType = MarketDepthIndex;
-    static constexpr bool enabled = true;
+    moodycamel::ConcurrentQueue<boost::intrusive_ptr<const T>> m_queue;
 };

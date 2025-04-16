@@ -1,7 +1,9 @@
 #pragma once
 
+#include <map>
 #include "MappedFileWriter.h"
 #include "MappedFileReader.h"
+#include "common.h"
 
 template<class T>
 class MappedFileManager {
@@ -31,13 +33,14 @@ public:
 
                 mappedFileWriters.erase(fileFullName);
 
-                delete ptr;
+                delete ptr;               
 
                 SPDLOG_INFO("mapped file {} for write finished.", fileFullName);
             }
         );
 
-        it->second = instancePtr;;
+        instancePtr->init();
+        it->second = instancePtr;
         return instancePtr;
     }
 

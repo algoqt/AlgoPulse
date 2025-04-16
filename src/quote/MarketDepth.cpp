@@ -17,8 +17,6 @@ MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _sha
 
     _symbol = tick->symbol;
 
-    //symbol = fmt::format("{:06}.{}", tick->symbol, agcommon::getMarketExchangeStrCode(exchange));
-
     quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick->created_at);
 
     preClose = _preClose;
@@ -376,53 +374,53 @@ std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage() const
 //    //m_refcount  = 0;
 //}
 //
-MarketDepth& MarketDepth::operator=(const MarketDepth& other) {
-
-    if (this == &other) {
-        return *this;
-    }
-
-    _symbol     = other._symbol;
-    exchange    = other.exchange;
-
-    quoteTime   = other.quoteTime;
-
-    preClose    = other.preClose;
-    amount      = other.amount;
-    volume      = other.volume;
-    open        = other.open;
-    low         = other.low;
-    high        = other.high;
-    price       = other.price;
-    change      = other.change;
-    changeP     = other.changeP;
-
-    askPrice1   = other.askPrice1;
-    askPrice2   = other.askPrice2;
-    askPrice3   = other.askPrice3;
-    askPrice4   = other.askPrice4;
-    askPrice5   = other.askPrice5;
-    askVol1     = other.askVol1;
-    askVol2     = other.askVol2;
-    askVol3     = other.askVol3;
-    askVol4     = other.askVol4;
-    askVol5     = other.askVol5;
-
-    bidPrice1   = other.bidPrice1;
-    bidPrice2   = other.bidPrice2;
-    bidPrice3   = other.bidPrice3;
-    bidPrice4   = other.bidPrice4;
-    bidPrice5   = other.bidPrice5;
-
-    bidVol1     = other.bidVol1;
-    bidVol2     = other.bidVol2;
-    bidVol3     = other.bidVol3;
-    bidVol4     = other.bidVol4;
-    bidVol5     = other.bidVol5;
-
-    deltaAmount = other.deltaAmount;
-    deltaVolume = other.deltaVolume;
-    turnRate    = other.turnRate;
-
-    return *this;
-}
+//MarketDepth& MarketDepth::operator=(const MarketDepth& other) {
+//
+//    if (this == &other) {
+//        return *this;
+//    }
+//
+//    _symbol     = other._symbol;
+//    exchange    = other.exchange;
+//
+//    quoteTime   = other.quoteTime;
+//
+//    preClose    = other.preClose;
+//    amount      = other.amount;
+//    volume      = other.volume;
+//    open        = other.open;
+//    low         = other.low;
+//    high        = other.high;
+//    price       = other.price;
+//    change      = other.change;
+//    changeP     = other.changeP;
+//
+//    askPrice1   = other.askPrice1;
+//    askPrice2   = other.askPrice2;
+//    askPrice3   = other.askPrice3;
+//    askPrice4   = other.askPrice4;
+//    askPrice5   = other.askPrice5;
+//    askVol1     = other.askVol1;
+//    askVol2     = other.askVol2;
+//    askVol3     = other.askVol3;
+//    askVol4     = other.askVol4;
+//    askVol5     = other.askVol5;
+//
+//    bidPrice1   = other.bidPrice1;
+//    bidPrice2   = other.bidPrice2;
+//    bidPrice3   = other.bidPrice3;
+//    bidPrice4   = other.bidPrice4;
+//    bidPrice5   = other.bidPrice5;
+//
+//    bidVol1     = other.bidVol1;
+//    bidVol2     = other.bidVol2;
+//    bidVol3     = other.bidVol3;
+//    bidVol4     = other.bidVol4;
+//    bidVol5     = other.bidVol5;
+//
+//    deltaAmount = other.deltaAmount;
+//    deltaVolume = other.deltaVolume;
+//    turnRate    = other.turnRate;
+//
+//    return *this;
+//}

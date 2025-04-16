@@ -1,7 +1,8 @@
 #pragma once
 #include <fstream> 
-#include "MappedFileWriter.h"
 #include <immintrin.h>
+#include "MappedFileWriter.h"
+
 
 template<class T>
 class MappedFileReader {
@@ -25,9 +26,11 @@ public:
     }
 
     size_t recordSize() const {
-        return m_header ? m_header->size : 0;
+        return m_header ? m_header->size.load(std::memory_order_acquire) : 0;
     }
-
+    size_t processSize() const {
+        return m_processItemSize.load(std::memory_order_acquire);
+    }
     const T& getRecord(size_t index) const {
         if (index >= recordSize()) {
             throw std::out_of_range("Record index out of range");
@@ -38,26 +41,24 @@ public:
         if (index >= recordSize()) {
             return nullptr;
         }
-        return reinterpret_cast<const T*>(
-            reinterpret_cast<char*>(m_header) + sizeof(MappedFileHeader) + index * sizeof(T));  // &m_data[index];
+        return m_data + index ;
     }
 
     void stop() {
         m_running = false;
     }
 
-    void realTimeRead(const std::function<void(const T&)>& func, int32_t checkFileDuration = 1000) {
+    size_t realTimeRead(const std::function<void(const T&)>& func, int32_t checkFileDuration = 1000) {
 
         m_running = true;
-        uint64_t alreadReadSize = 0;
 
         while (not std::filesystem::exists(m_fileFullName)) {
             if (checkFileDuration > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                std::this_thread::sleep_for(std::chrono::milliseconds(checkFileDuration));
             }
             else {
                 SPDLOG_ERROR("{} not exits!", m_fileFullName);
-                return;
+                return 0;
             }
         }
 
@@ -66,30 +67,35 @@ public:
             m_header->readers.fetch_add(1);
         }
 
-        SPDLOG_INFO("init record count:{},capacity:{},readers:{}", m_header->size, m_lastCapacity, m_header->readers.load());
+        SPDLOG_INFO("init record count:{},capacity:{},readers:{}", m_header->size.load(), m_lastCapacity, m_header->readers.load());
 
+        uint64_t alreadyReadItemSize = 0;
         while (m_running) {
 
-            if (m_header->capacity != m_lastCapacity) {
-                remap_file();
-            }
+            //std::atomic_thread_fence(std::memory_order_acquire);
 
-            uint64_t currentSize = m_header->size;
-            if (alreadReadSize < currentSize) {
-                SPDLOG_DEBUG("read records:last :{},current:{}", alreadReadSize, currentSize);
+            uint64_t currentSize = m_header->size.load(std::memory_order_acquire);
 
-                for (auto i = alreadReadSize; i < currentSize; i++) {
-
-                    if (func) {
-                        func(m_data[i]);
-                    }
+            if (currentSize > m_lastCapacity) {
+                if (m_header->capacity.load(std::memory_order_acquire) != m_lastCapacity) {
+                    remap_file();
+                    currentSize = m_header->size.load(std::memory_order_acquire);
                 }
-                alreadReadSize = currentSize;
             }
-            _mm_pause();
-            std::this_thread::yield();
-            //std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (alreadyReadItemSize < currentSize) {
+                SPDLOG_DEBUG("read records:last :{},current:{}", alreadyReadItemSize, currentSize);
+
+                for (auto i = alreadyReadItemSize; i < currentSize; i++) {
+                    func(m_data[i]);
+                }
+                m_processItemSize.fetch_add(currentSize- alreadyReadItemSize,std::memory_order_relaxed);
+                alreadyReadItemSize = currentSize;
+            }
+            else {
+                _mm_pause();              //std::this_thread::yield();
+            }
         }
+        return alreadyReadItemSize;
     }
 
 private:
@@ -124,4 +130,7 @@ private:
     const T*                            m_data = nullptr;
 
     size_t                              m_lastCapacity = 0;
+
+    std::atomic<uint64_t>               m_processItemSize{ 0 };
+
 };

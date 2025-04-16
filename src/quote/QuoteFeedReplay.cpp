@@ -111,8 +111,6 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
     if (m_keepRuning)
         co_return;
 
-    auto m_mdWriter = MappedFileManager<MarketDepth>::createWriter(std::format("./md_TEST.bin"));
-
     m_keepRuning = true;
     int i = 0;
     if (m_quoteTime2Symbol2md.size() > 0) {
@@ -177,10 +175,7 @@ asio::awaitable<void> QuoteFeedReplay::co_run() {
                     }
                 }
             }
-            
-            if (m_mdWriter) {
-                m_mdWriter->append(md);
-            }
+
             md->release();
         }
     

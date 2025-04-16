@@ -12,7 +12,7 @@ namespace agcommon
         case MarketExchange::SHSE:
             return "SH";
         default:
-            return "Invalid";
+            return "XX";
         }
     }
 

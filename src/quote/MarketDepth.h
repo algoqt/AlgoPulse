@@ -31,7 +31,7 @@ public:
 
     //MarketDepth(const MarketDepth&);
 
-    MarketDepth& operator=(const MarketDepth&);
+    //MarketDepth& operator=(const MarketDepth&);
 
     MarketDepth(const Symbol_t& symbolStr,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
 

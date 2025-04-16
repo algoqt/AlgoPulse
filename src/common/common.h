@@ -457,9 +457,9 @@ namespace agcommon {
                 time_str = std::to_string(duration_us.count()) + "us";
             }
 
-            std::string file_name = std::filesystem::path(loc.file_name()).filename().string();
+            auto file_name = std::filesystem::path(loc.file_name()).filename().string();
 
-			SPDLOG_INFO("[TC]{}{}:{} {}@ {},{}", title, describe, time_str, suftext, file_name, loc.line());
+			SPDLOG_INFO("[{}:{}][TimeCost]{}{}:{} {}", file_name, loc.line(), title, describe, time_str, suftext);
 		}
 
         std::string title;

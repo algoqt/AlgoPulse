@@ -33,8 +33,8 @@ AsioContextPtr ContextService::createContext(const std::string& contextKeyName, 
 
 void ContextService::stopContext(const std::string& contextKeyName) {
 
-	std::scoped_lock lock(m_mutex)
-		;
+	std::scoped_lock lock(m_mutex);
+
 	auto it = appKey2workGuard.find(contextKeyName);
 	if (it != appKey2workGuard.end()) {
 		auto& wg = it->second;
