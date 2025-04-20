@@ -33,13 +33,15 @@ public:
 
     //MarketDepth& operator=(const MarketDepth&);
 
+    MarketDepth(const uint32_t& symbolInt, agcommon::MarketExchange ex,const OrderTime_t& quoteTime = boost::posix_time::min_date_time);
+
     MarketDepth(const Symbol_t& symbolStr,const OrderTime_t& quoteTime = boost::posix_time::min_date_time );
 
     MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _share_circ = 0);
 
-    inline Symbol_t symbol() const { return fmt::format("{:06}.{}", _symbol, agcommon::getMarketExchangeStrCode(exchange)); };
+    inline Symbol_t symbol() const { return fmt::format("{:06}.{}", symbolInt, agcommon::getMarketExchangeStrCode(exchange)); };
 
-    inline uint32_t symbolIntFormat() const { return (uint32_t)exchange * 10000000 + _symbol; };
+    inline uint32_t symbolIntUnique() const { return (uint32_t)exchange * 10000000 + symbolInt; };
 
     std::vector<std::pair<double,int>> getAskQuotes() const;
 
@@ -70,10 +72,9 @@ public:
 
     std::shared_ptr<AlgoMsg::MsgMarketDepth> encode2AlgoMessage() const;
 
-
 public:
 
-    uint32_t                _symbol{ 0 };
+    uint32_t                symbolInt{ 0 };
     agcommon::MarketExchange  exchange{ agcommon::MarketExchange::unDefined };
 
     double price{ 0 };

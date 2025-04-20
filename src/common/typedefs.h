@@ -10,7 +10,6 @@
 #include <spdlog/spdlog.h>
 #include "AlgoMessages.pb.h"
 
-#include <iostream>
 
 #if defined(__GNUC__) || defined(__clang__)
 #define likely(x)   __builtin_expect(!!(x), 1)

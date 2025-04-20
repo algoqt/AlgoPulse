@@ -67,10 +67,14 @@ add_custom_command(
     DEPENDS ${algo_protocal_path}/AlgoMessages.proto
     COMMENT "Generating .pb.cc and .pb.h files from AlgoMessages.proto"
 )
+add_custom_target(GenerateProto ALL
+    DEPENDS ${GENERATED_PROTO_SRC} ${GENERATED_PROTO_HDR}
+)
 
 add_executable(algoPulse "main.cpp" ${GENERATED_PROTO_SRC} ${Requests_FILES} ${Common_FILES} ${Algo_FILES})
 add_subdirs_to_target_include_directories(algoPulse ${PROJECT_SOURCE_DIR})
 target_link_libraries(algoPulse Boost::coroutine Boost::system Boost::context ${DEPENDENT_LIBS})
+add_dependencies(algoPulse GenerateProto)
 
 target_compile_definitions(algoPulse PRIVATE ENABLE_DELAY_STATS=${ENABLE_DELAY_STATS})
 target_compile_definitions(algoPulse PRIVATE OUTPUT_LOG_TO_STD_OUT=${OUTPUT_LOG_TO_STD_OUT})

@@ -4,13 +4,26 @@
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
-#include "ContextService.h"
+
 #include <boost/filesystem.hpp>
+#include <immintrin.h>
 #include "concurrentqueue.h"
+#include "../third_party/readerwriterqueue.h"
+#include "common.h"
 #include "MapppeFileIndexTraits.h"
 
 namespace bip = boost::interprocess;
 
+//template<typename T>
+//concept HasRelease = requires(T t) {
+//    { t.release() } -> std::same_as<void>;
+//};
+//template<typename T>
+//concept HasRetainAlive = requires(T t) {
+//    { t.retainAlive() } -> std::same_as<void>;
+//};
+
+class MarketDepthTest;
 
 template<typename T>
 class MappedFileManager;
@@ -28,28 +41,40 @@ class MappedFileWriter : public std::enable_shared_from_this<MappedFileWriter<T>
 
 public:
 
+    void appendAsync(const T* mdPtr) {
+
+        if (!m_running.load(std::memory_order_relaxed)) return;
+
+        int32_t i = 0;
+
+        if constexpr (requires(T t) { t.retainAlive(); }) {
+            mdPtr->retainAlive();
+        }
+
+        while (i<1024) {
+            if (m_queue.try_enqueue(mdPtr))  return;
+            ++i;
+            _mm_pause();
+        }
+        m_queue.enqueue(mdPtr);
+    }
+
     void append(const T* mdPtr) {
 
-        if (!m_running) return;
+        if (!m_running.load(std::memory_order_relaxed)) return;
 
-        // 1: fastest,just call function
-        // _append(mdPtr);
-
-        // 2: queue to sink
-        static moodycamel::ProducerToken ptok(m_queue);
-        m_queue.enqueue(ptok,boost::intrusive_ptr(mdPtr));
-        
-        // 3: asio post
-        //asio::post(*m_runContext, [this, instrPtr = boost::intrusive_ptr(mdPtr)]() { _append(instrPtr.get()); });
-
+        _append(mdPtr);
     }
 
     size_t recordSize() const {
         return m_header ? m_header->size.load(std::memory_order_acquire) : 0;
     }
+
 private:
 
-    MappedFileWriter(const std::string& fileFullName, size_t initialCapacity = 1024 * 1024, size_t cacheQueueSize = 1024)
+    MappedFileWriter(const std::string& fileFullName
+        , size_t initialCapacity
+        , size_t cacheQueueSize)
         : m_fileFullName(fileFullName)
         , m_currentCapacity(initialCapacity)
         , m_queue(cacheQueueSize) {
@@ -59,14 +84,23 @@ private:
 
         stop();
 
-        if (m_mappedRegion) m_mappedRegion->flush();
+        if (m_thread.joinable())  m_thread.join();
+
+        if (m_mappedRegion) {
+            m_mappedRegion->flush();
+            if (m_header) {
+                SPDLOG_INFO("close File:{},size:{},capacity:{},fileSize:{}"
+                    , m_fileFullName
+                    , m_header->size.load()
+                    , m_header->capacity.load()
+                    , std::filesystem::file_size(m_fileFullName));
+            }
+        }
 
         if (m_file.is_open()) m_file.close();
 
         m_mappedRegion.reset();
         m_fileMapping.reset();
-
-        ContextService::getInstance().stopContext(typeid(T).name());
 
     }
 
@@ -110,7 +144,7 @@ private:
             buildIndexMap(); 
         }
 
-        m_currentSize  = m_header->size;
+        m_currentSize         = m_header->size;
         m_currentCapacity     = m_header->capacity;
 
         SPDLOG_INFO("open File:{},size:{},capacity:{},fileSize:{}"
@@ -119,11 +153,10 @@ private:
             , m_header->capacity.load()
             , std::filesystem::file_size(m_fileFullName));
 
-        m_runContext = ContextService::getInstance().createContext(typeid(T).name(), 1);
-
         m_running = true;
 
-        asio::post(*m_runContext, [this]() { sink();  }); // dont't need this->shared_from_this(), see MappedFileManager::createWriter
+        m_thread = std::thread([this]() { sink();  });
+        agcommon::set_thread_affinity(m_thread, 3);
 
         return true;
     }
@@ -237,37 +270,41 @@ private:
         return sizeof(MappedFileHeader) + sizeof(T) * cap + (useIndex ? sizeof(IndexEntryT) * cap : 0);
     }
 
-    inline void stop() { m_running.store(false); }
+    inline void stop() { 
+        m_running.store(false); 
+    }
 
     inline bool hasNoReaders() { return m_header && m_header->readers.load() == 0; }
 
     inline std::string getFilePath() { return m_fileFullName; }
 
     void sink() {
-        constexpr int BatchSize = 128;
+        static uint64_t count = 0;
+        SPDLOG_INFO("start sink to file");
 
-        static moodycamel::ConsumerToken ctok(m_queue);
+        const T* itemPtr = nullptr;
 
-        std::vector<boost::intrusive_ptr<const T>> ptrBuffer(BatchSize);
+        while (m_running.load(std::memory_order_relaxed)) {
 
-        boost::intrusive_ptr<const T> instrusivPtr;
+            while (m_queue.try_dequeue(itemPtr)) {
 
-        while (m_running.load()) {
-            // batch mode
-            //_appendBatch(ctok, ptrBuffer, BatchSize);
+                _append(itemPtr);
 
-            // single mode
-            if (m_queue.try_dequeue(ctok,instrusivPtr)) {
-                _append(instrusivPtr.get());
+                if constexpr (requires(T t) { t.release(); }) {
+                    itemPtr->release();
+                }
+                ++count;
+                if (count % 100000 == 0) { SPDLOG_INFO("sink count {}.", count); }
             }
+
+            _mm_pause();              //std::this_thread::yield();
         }
 
         SPDLOG_INFO("Mapped file sink stopped");
     }
 
-    void _appendBatch(moodycamel::ConsumerToken& ctok,std::vector<boost::intrusive_ptr<const T>>& buffer,size_t batchSize) {
+    void _appendBatch(std::vector<boost::intrusive_ptr<const T>>& buffer,size_t count) {
 
-        size_t count = m_queue.try_dequeue_bulk(ctok, buffer.begin(), batchSize);
 
         size_t currentItemSize = m_currentSize;
 
@@ -318,7 +355,6 @@ private:
         m_header->size.store(m_currentSize, std::memory_order_release);
     }
 
-private:
 
     std::string         m_fileFullName;
 
@@ -341,5 +377,8 @@ private:
 
     std::unordered_map<IndexEntryKeyT, std::vector<size_t>> m_indexKeyPositionMap;
 
-    moodycamel::ConcurrentQueue<boost::intrusive_ptr<const T>> m_queue;
+    moodycamel::ReaderWriterQueue<const T*> m_queue; //boost::intrusive_ptr<const T>
+
+    std::thread         m_thread{};
+
 };

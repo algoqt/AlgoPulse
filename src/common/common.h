@@ -424,6 +424,10 @@ namespace agcommon {
                 logTimeCost();
             }
         }
+        inline static int64_t nowNs() {
+            return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+        }
 
         void timeAt(const std::string& _desc = "") {
 
@@ -517,7 +521,33 @@ namespace agcommon {
         }
         return default_value;
     }
+    #ifdef __linux__
+    #include <pthread.h>
+    #include <sched.h>
+    #elif _WIN32
+    #include <windows.h>
+    #endif
 
+        inline void set_thread_affinity(std::thread& thread, int cpu_id) {
+    #ifdef __linux__
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(cpu_id, &cpuset);
+
+            if (pthread_setaffinity_np(thread.native_handle(),
+                sizeof(cpu_set_t), &cpuset) != 0) {
+                std::cerr << "Failed to set thread affinity on Linux" << std::endl;
+            }
+    #elif _WIN32
+            DWORD_PTR mask = 1ULL << cpu_id;
+            if (SetThreadAffinityMask(thread.native_handle(), mask) == 0) {
+                std::cerr << "Failed to set thread affinity on Windows. Error: "
+                    << GetLastError() << std::endl;
+            }
+    #else
+            std::cerr << "Thread affinity setting not supported on this platform" << std::endl;
+    #endif
+        }
 } // namespace common
 
 

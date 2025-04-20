@@ -1,12 +1,17 @@
 #include "MarketDepth.h"
 #include "H5DataTypes.h"
 
+MarketDepth::MarketDepth(const uint32_t& _symbolInt, agcommon::MarketExchange ex
+    , const OrderTime_t& quoteTime /*= boost::posix_time::min_date_time*/)
+    : symbolInt(_symbolInt),exchange(ex)
+    ,quoteTime(quoteTime) {
+}
 
 MarketDepth::MarketDepth(const Symbol_t& symbol_, const OrderTime_t& quoteTime ) 
     : quoteTime(quoteTime) {
     auto idx = symbol_.find(".");
     if (not symbol_.empty() and idx != std::string::npos) {
-        _symbol  = agcommon::get_int(symbol_.substr(0,idx));
+        symbolInt = agcommon::get_int(symbol_.substr(0,idx));
         exchange = agcommon::getMarketExchangeCode(symbol_);
     }
 };
@@ -15,7 +20,7 @@ MarketDepth::MarketDepth(const h5data::Tick* tick, float _preClose, int64_t _sha
 
     exchange = (agcommon::MarketExchange)(tick->exchange);
 
-    _symbol = tick->symbol;
+    symbolInt = tick->symbol;
 
     quoteTime = agcommon::AshareMarketTime::convert2ShanghaiTZ(tick->created_at);
 
@@ -331,9 +336,9 @@ std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage() const
 //
 //MarketDepth::MarketDepth(const MarketDepth& other) {
 //
-//    SPDLOG_DEBUG("copy_tag,{},{}", other.symbol,agcommon::getDateTimeStr(quoteTime));
+//    SPDLOG_DEBUG("copy_tag,{},{}", other.symbolInt,agcommon::getDateTimeStr(quoteTime));
 //
-//    symbol = other.symbol;
+//    symbolInt = other.symbolInt;
 //    quoteTime = other.quoteTime;
 //    preClose = other.preClose;
 //    amount = other.amount;
@@ -380,7 +385,7 @@ std::shared_ptr<AlgoMsg::MsgMarketDepth> MarketDepth::encode2AlgoMessage() const
 //        return *this;
 //    }
 //
-//    _symbol     = other._symbol;
+//    symbolInt   = other.symbolInt;
 //    exchange    = other.exchange;
 //
 //    quoteTime   = other.quoteTime;

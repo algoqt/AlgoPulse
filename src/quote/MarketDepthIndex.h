@@ -11,7 +11,7 @@ struct MarketDepthIndex {
 
     static MarketDepthIndex getIndex(const MarketDepth* md, uint32_t offset) {
         return MarketDepthIndex{
-            .symbol = md->symbolIntFormat(),
+            .symbol = md->symbolIntUnique(),
             .timestamp = agcommon::to_timestamp(md->quoteTime),
             .offset = offset
         };

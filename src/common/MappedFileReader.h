@@ -29,7 +29,7 @@ public:
         return m_header ? m_header->size.load(std::memory_order_acquire) : 0;
     }
     size_t processSize() const {
-        return m_processItemSize.load(std::memory_order_acquire);
+        return m_processItemSize;
     }
     const T& getRecord(size_t index) const {
         if (index >= recordSize()) {
@@ -69,44 +69,46 @@ public:
 
         SPDLOG_INFO("init record count:{},capacity:{},readers:{}", m_header->size.load(), m_lastCapacity, m_header->readers.load());
 
-        uint64_t alreadyReadItemSize = 0;
-        while (m_running) {
+        m_processItemSize = 0;
 
-            //std::atomic_thread_fence(std::memory_order_acquire);
+        while (m_running) {
 
             uint64_t currentSize = m_header->size.load(std::memory_order_acquire);
 
             if (currentSize > m_lastCapacity) {
-                if (m_header->capacity.load(std::memory_order_acquire) != m_lastCapacity) {
+                auto newCapacity = m_header->capacity.load(std::memory_order_acquire);
+                if (newCapacity != m_lastCapacity) {
+                    SPDLOG_INFO("{} capacity:{} Change to {}", m_fileFullName, m_lastCapacity, newCapacity);
                     remap_file();
                     currentSize = m_header->size.load(std::memory_order_acquire);
                 }
             }
-            if (alreadyReadItemSize < currentSize) {
-                SPDLOG_DEBUG("read records:last :{},current:{}", alreadyReadItemSize, currentSize);
+            if (m_processItemSize < currentSize) {
+                SPDLOG_DEBUG("read records:last :{},current:{}", m_processItemSize, currentSize);
 
-                for (auto i = alreadyReadItemSize; i < currentSize; i++) {
+                for (auto i = m_processItemSize; i < currentSize; i++) {
                     func(m_data[i]);
                 }
-                m_processItemSize.fetch_add(currentSize- alreadyReadItemSize,std::memory_order_relaxed);
-                alreadyReadItemSize = currentSize;
+
+                m_processItemSize = currentSize;
             }
-            else {
-                _mm_pause();              //std::this_thread::yield();
-            }
+            //else {
+            //    _mm_pause();              //std::this_thread::yield();
+            //}
         }
-        return alreadyReadItemSize;
+        return m_processItemSize;
     }
 
 private:
 
     void remap_file() {
 
+        if (not m_fileMapping) {
+            m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), bip::read_write);
+        }
         m_mappedRegion.reset();
-        m_fileMapping.reset();
-        m_header = nullptr;
 
-        m_fileMapping = std::make_unique<bip::file_mapping>(m_fileFullName.c_str(), bip::read_write);
+        m_header = nullptr;
 
         m_mappedRegion = std::make_unique<bip::mapped_region>(*m_fileMapping, bip::read_write);
 
@@ -114,7 +116,7 @@ private:
 
         m_data = reinterpret_cast<const T*>(reinterpret_cast<const char*>(m_header) + sizeof(MappedFileHeader));
 
-        m_lastCapacity = m_header->capacity;
+        m_lastCapacity = m_header->capacity.load();
 
     }
 
@@ -131,6 +133,6 @@ private:
 
     size_t                              m_lastCapacity = 0;
 
-    std::atomic<uint64_t>               m_processItemSize{ 0 };
+    uint64_t               m_processItemSize{ 0 };
 
 };

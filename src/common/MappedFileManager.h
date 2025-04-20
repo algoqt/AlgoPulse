@@ -3,7 +3,7 @@
 #include <map>
 #include "MappedFileWriter.h"
 #include "MappedFileReader.h"
-#include "common.h"
+
 
 template<class T>
 class MappedFileManager {
@@ -11,7 +11,9 @@ class MappedFileManager {
     using MappedFileReader4T  = MappedFileReader<T>;
 
 public:
-    static std::shared_ptr<MappedFileWriter4T> createWriter(const std::string& fileFullName, size_t initialSize = 1024 * 1024) {
+    static std::shared_ptr<MappedFileWriter4T> createWriter(const std::string& fileFullName
+        ,size_t initialSize = 1024 * 1024
+        ,size_t asyncQueueSize = 1024 * 16) {
         std::scoped_lock<std::mutex> lock(m_mutex);
 
         auto [it, inserted] = mappedFileWriters.try_emplace(fileFullName, std::weak_ptr<MappedFileWriter4T>());
@@ -21,7 +23,7 @@ public:
         }
 
         auto instancePtr = std::shared_ptr<MappedFileWriter4T>(
-            new MappedFileWriter4T(fileFullName, initialSize),
+            new MappedFileWriter4T(fileFullName, initialSize,asyncQueueSize),
             [fileFullName](MappedFileWriter4T* ptr) {
                 std::scoped_lock<std::mutex> lock(m_mutex);
 
@@ -34,8 +36,6 @@ public:
                 mappedFileWriters.erase(fileFullName);
 
                 delete ptr;               
-
-                SPDLOG_INFO("mapped file {} for write finished.", fileFullName);
             }
         );
 
